@@ -21,3 +21,25 @@ export async function saveVisits(v: Visits): Promise<void> {
     // 保存失敗時は次回の更新で再試行される
   }
 }
+
+const CELLS_KEY = 'cells.v1';
+
+/** 区画キー ("iy,ix") -> 初訪問日 (YYYY-MM-DD) */
+export type Cells = Record<string, string>;
+
+export async function loadCells(): Promise<Cells> {
+  try {
+    const s = await AsyncStorage.getItem(CELLS_KEY);
+    return s ? JSON.parse(s) : {};
+  } catch {
+    return {};
+  }
+}
+
+export async function saveCells(c: Cells): Promise<void> {
+  try {
+    await AsyncStorage.setItem(CELLS_KEY, JSON.stringify(c));
+  } catch {
+    // 次の更新で再試行される
+  }
+}

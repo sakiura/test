@@ -7,17 +7,17 @@ import { percent, prefStats } from './stats';
 import type { Visits } from './visits';
 
 /** 画面外に置いて画像化する共有用カード */
-export const ShareCard = forwardRef<ViewShotRef, { visits: Visits }>(function ShareCard({ visits }, ref) {
+export const ShareCard = forwardRef<ViewShotRef, { visits: Visits; cellCount: number }>(function ShareCard({ visits, cellCount }, ref) {
   const stats = prefStats(visits);
   const visited = stats.reduce((n, s) => n + s.visited, 0);
   const total = stats.reduce((n, s) => n + s.total, 0);
   return (
     <ViewShot ref={ref} options={{ format: 'png', quality: 1 }} style={styles.card}>
       <Text style={styles.title}>ぬりつぶし日本</Text>
-      <Text style={styles.big}>
-        {visited} / {total}
+      <Text style={styles.big}>{cellCount} 区画</Text>
+      <Text style={styles.sub}>
+        歩いて塗った街 ・ 市区町村 {visited}/{total} ({percent(visited, total)}%)
       </Text>
-      <Text style={styles.sub}>市区町村を制覇 ({percent(visited, total)}%)</Text>
       <View style={styles.grid}>
         {stats.map((s) => {
           const p = s.visited / s.total;
