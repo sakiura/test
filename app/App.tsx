@@ -3,13 +3,17 @@ import * as Location from 'expo-location';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Pressable, SafeAreaView, StyleSheet, Text, View } from 'react-native';
 import type { ViewShotRef } from 'react-native-view-shot';
-import MapView, { Polygon, type Region } from 'react-native-maps';
+import MapView, { Marker, Polygon, UrlTile, type Region } from 'react-native-maps';
 import { AdBanner } from './src/AdBanner';
 import { prefColor } from './src/color';
 import { CELL_KM2, cellCorners, cellCenter, cellsAlong, keyOf, parseKey, suggestDetour, todayStr, DLAT, DLNG, type LatLng } from './src/grid';
 import { byCode, findMunicipality, municipalities, type Municipality } from './src/geo';
 import { useRemoveAds } from './src/purchases';
 import { ShareCard, shareImage } from './src/ShareCard';
+import { SpotDetail } from './src/SpotDetail';
+import { SpotsScreen } from './src/SpotsScreen';
+import { categoryOf, nearestUnvisitedSpot, spotById, spotsHere, spotsInRegion } from './src/spots';
+import { loadSpotVisits, saveSpotVisits, type SpotVisit, type SpotVisits } from './src/spotStore';
 import { StatsScreen } from './src/StatsScreen';
 import { loadCells, loadVisits, saveCells, saveVisits, type Cells, type Visits } from './src/visits';
 
@@ -18,6 +22,9 @@ const toLatLng = (ring: [number, number][]) => ring.map(([longitude, latitude]) 
 /** これより広い範囲を表示しているときは区画ではなく市区町村で塗りを見せる */
 const CELL_ZOOM_MAX_DELTA = 0.25;
 const MAX_CELLS_DRAWN = 800;
+// 地図タイル。OSM標準タイルは利用ポリシーにより大量アクセスの商用アプリには不向き。
+// 公開時はタイル配信事業者 (MapTilerなど) のURLを EXPO_PUBLIC_TILE_URL に設定すること。
+const TILE_URL = process.env.EXPO_PUBLIC_TILE_URL ?? 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
 
 const Painted = memo(function Painted({ m }: { m: Municipality }) {
   const { fill, stroke } = prefColor(m.p);
@@ -50,7 +57,18 @@ export default function App() {
   const [region, setRegion] = useState<Region | null>(null);
   const map = useRef<MapView>(null);
   const card = useRef<ViewShotRef>(null);
-  const [tab, setTab] = useState<'map' | 'stats'>('map');
+  const [tab, setTab] = useState<'map' | 'spots' | 'stats'>('map');
+  const [spotVisits, setSpotVisits] = useState<SpotVisits>({});
+  const spotVisitsRef = useRef<SpotVisits>({});
+  const [openSpot, setOpenSpot] = useState<string | null>(null);
+  const [arrived, setArrived] = useState<string | null>(null);
+
+  const updateSpotVisit = useCallback((id: string, v: SpotVisit) => {
+    const next = { ...spotVisitsRef.current, [id]: v };
+    spotVisitsRef.current = next;
+    setSpotVisits(next);
+    saveSpotVisits(next);
+  }, []);
   const iap = useRemoveAds();
 
   const share = useCallback(async () => {
@@ -63,7 +81,9 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    Promise.all([loadVisits(), loadCells()]).then(([v, c]) => {
+    Promise.all([loadVisits(), loadCells(), loadSpotVisits()]).then(([v, c, sv]) => {
+      spotVisitsRef.current = sv;
+      setSpotVisits(sv);
       visitsRef.current = v;
       cellsRef.current = c;
       setCells(c);
@@ -86,6 +106,15 @@ export default function App() {
       cellsRef.current = nextCells;
       setCells(nextCells);
       saveCells(nextCells);
+    }
+    // 公園・温泉などの場所に着いたか
+    for (const sp of spotsHere(pos)) {
+      if (spotVisitsRef.current[sp.id]) continue;
+      const v = { at: new Date().toISOString(), note: '', photos: [] };
+      spotVisitsRef.current = { ...spotVisitsRef.current, [sp.id]: v };
+      setSpotVisits(spotVisitsRef.current);
+      saveSpotVisits(spotVisitsRef.current);
+      setArrived(sp.id);
     }
     const m = findMunicipality(longitude, latitude);
     setCurrent(m);
@@ -130,6 +159,12 @@ export default function App() {
     return () => clearTimeout(t);
   }, [justUnlocked]);
 
+  useEffect(() => {
+    if (!arrived) return;
+    const t = setTimeout(() => setArrived(null), 8000);
+    return () => clearTimeout(t);
+  }, [arrived]);
+
   const painted = useMemo(
     () => Object.keys(visits ?? {}).flatMap((c) => byCode.get(c) ?? []),
     [visits],
@@ -139,13 +174,18 @@ export default function App() {
   const cellKeys = Object.keys(cells);
   const todayCount = cellKeys.reduce((n, k) => n + (cells[k] === today ? 1 : 0), 0);
 
-  const detour = useMemo(
+  const showCells = !region || region.latitudeDelta <= CELL_ZOOM_MAX_DELTA;
+  const spotDetour = useMemo(
+    () => (here ? nearestUnvisitedSpot(here, (id) => id in spotVisits) : null),
+    [here, spotVisits],
+  );
+  const cellDetour = useMemo(
     () => (here ? suggestDetour(here, (k) => k in cells) : null),
     // 区画が増えるたびに探し直す
     [here, cells],
   );
+  const visibleSpots = useMemo(() => (region && showCells ? spotsInRegion(region) : []), [region, showCells]);
 
-  const showCells = !region || region.latitudeDelta <= CELL_ZOOM_MAX_DELTA;
   const visibleCells = useMemo(() => {
     if (!region || !showCells) return [];
     const [s, n] = [region.latitude - region.latitudeDelta / 2, region.latitude + region.latitudeDelta / 2];
@@ -161,10 +201,10 @@ export default function App() {
   }, [region, showCells, cells]);
 
   const goDetour = useCallback(() => {
-    if (!detour) return;
-    const c = cellCenter(detour.cell);
+    const c = spotDetour ? { lat: spotDetour.spot.la, lng: spotDetour.spot.lo } : cellDetour ? cellCenter(cellDetour.cell) : null;
+    if (!c) return;
     map.current?.animateToRegion({ latitude: c.lat, longitude: c.lng, latitudeDelta: 0.02, longitudeDelta: 0.02 }, 400);
-  }, [detour]);
+  }, [spotDetour, cellDetour]);
 
   return (
     <SafeAreaView style={styles.root}>
@@ -184,21 +224,34 @@ export default function App() {
         </Text>
       </View>
       <View style={styles.tabs}>
-        {(['map', 'stats'] as const).map((t) => (
+        {(['map', 'spots', 'stats'] as const).map((t) => (
           <Pressable key={t} onPress={() => setTab(t)} style={[styles.tab, tab === t && styles.tabOn]}>
-            <Text style={tab === t && styles.tabOnText}>{t === 'map' ? '地図' : '達成率'}</Text>
+            <Text style={tab === t && styles.tabOnText}>{t === 'map' ? '地図' : t === 'spots' ? '図鑑' : '達成率'}</Text>
           </Pressable>
         ))}
       </View>
+      {tab === 'spots' && <SpotsScreen visits={spotVisits} onOpen={setOpenSpot} />}
       {tab === 'stats' && <StatsScreen visits={visits ?? {}} />}
-      <View style={[styles.mapWrap, tab === 'stats' && { display: 'none' }]}>
+      <View style={[styles.mapWrap, tab !== 'map' && { display: 'none' }]}>
         <MapView
           ref={map}
           style={StyleSheet.absoluteFill}
           initialRegion={{ latitude: 36.2, longitude: 138.25, latitudeDelta: 14, longitudeDelta: 14 }}
           showsUserLocation
+          mapType="none"
           onRegionChangeComplete={setRegion}
         >
+          <UrlTile urlTemplate={TILE_URL} maximumZ={19} zIndex={-1} />
+          {visibleSpots.map((sp) => (
+            <Marker
+              key={sp.id}
+              coordinate={{ latitude: sp.la, longitude: sp.lo }}
+              title={`${categoryOf(sp.c)?.emoji ?? ''} ${sp.n}`}
+              pinColor={spotVisits[sp.id] ? 'green' : 'red'}
+              tracksViewChanges={false}
+              onCalloutPress={() => spotVisits[sp.id] && setOpenSpot(sp.id)}
+            />
+          ))}
           {showCells
             ? visibleCells.map((k) => (
                 <Polygon
@@ -211,12 +264,39 @@ export default function App() {
               ))
             : painted.map((m) => <Painted key={m.c} m={m} />)}
         </MapView>
-        {detour && (
+        {(spotDetour || cellDetour) && (
           <Pressable style={styles.detour} onPress={goDetour}>
-            <Text style={styles.detourTitle}>
-              🚶 {detour.dir}へ約{detour.meters}m に、まだ塗っていない場所
+            {spotDetour ? (
+              <>
+                <Text style={styles.detourTitle}>
+                  {categoryOf(spotDetour.spot.c)?.emoji} {spotDetour.spot.n} まで {spotDetour.dir}へ約{spotDetour.meters}m
+                </Text>
+                <Text style={styles.detourText}>まだ訪れていません。寄り道してみよう</Text>
+              </>
+            ) : (
+              cellDetour && (
+                <>
+                  <Text style={styles.detourTitle}>
+                    🚶 {cellDetour.dir}へ約{cellDetour.meters}m に、まだ塗っていない場所
+                  </Text>
+                  <Text style={styles.detourText}>{cellDetour.theme}</Text>
+                </>
+              )
+            )}
+          </Pressable>
+        )}
+        <Text style={styles.attribution}>© OpenStreetMap contributors</Text>
+        {arrived && spotById.get(arrived) && (
+          <Pressable
+            style={[styles.toast, { top: 60 }]}
+            onPress={() => {
+              setOpenSpot(arrived);
+              setArrived(null);
+            }}
+          >
+            <Text style={styles.toastText}>
+              {categoryOf(spotById.get(arrived)!.c)?.emoji} {spotById.get(arrived)!.n} に着きました！ タップで写真を残す
             </Text>
-            <Text style={styles.detourText}>{detour.theme}</Text>
           </Pressable>
         )}
         {justUnlocked && (
@@ -236,6 +316,7 @@ export default function App() {
         </View>
       )}
       {!iap.adsRemoved && <AdBanner />}
+      <SpotDetail spotId={openSpot} visit={openSpot ? spotVisits[openSpot] : undefined} onChange={updateSpotVisit} onClose={() => setOpenSpot(null)} />
       <ShareCard ref={card} visits={visits ?? {}} cellCount={cellKeys.length} />
     </SafeAreaView>
   );
@@ -257,6 +338,7 @@ const styles = StyleSheet.create({
   detour: { position: 'absolute', left: 12, right: 12, bottom: 12, backgroundColor: '#fffe', borderRadius: 12, padding: 12 },
   detourTitle: { fontWeight: '700', fontSize: 14 },
   detourText: { color: '#555', fontSize: 13, marginTop: 2 },
+  attribution: { position: 'absolute', left: 6, bottom: 2, fontSize: 10, color: '#333', backgroundColor: '#fff9' },
   toast: { position: 'absolute', top: 12, alignSelf: 'center', backgroundColor: '#000c', borderRadius: 20, paddingHorizontal: 16, paddingVertical: 10 },
   toastText: { color: '#fff', fontWeight: '600' },
 });

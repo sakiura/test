@@ -30,6 +30,13 @@
         }
       ],
       [
+        "expo-image-picker",
+        {
+          "photosPermission": "訪れた場所の写真を記録に残すために使用します。",
+          "cameraPermission": "訪れた場所の写真を撮って記録に残すために使用します。"
+        }
+      ],
+      [
         "react-native-google-mobile-ads",
         {
           "iosAppId": "ca-app-pub-3940256099942544~1458002511"

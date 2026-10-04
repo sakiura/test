@@ -2,7 +2,7 @@
 // 境界データが不要で、端末内だけで完結する。
 export const DLAT = 0.0025;
 export const DLNG = 0.003;
-const M_PER_DEG = 111_320;
+export const M_PER_DEG = 111_320;
 
 export type Cell = { iy: number; ix: number };
 export type LatLng = { lat: number; lng: number };

@@ -1,0 +1,29 @@
+{
+  "_comment": "場所の種類を増やすには categories に1件足して `npm run build:spots` を実行する。queries はOverpass QLのフィルタ (名前のあるものだけ取得される)。",
+  "categories": [
+    {
+      "id": "park",
+      "label": "公園",
+      "emoji": "🌳",
+      "radius": 60,
+      "queries": ["nwr[\"leisure\"=\"park\"][\"name\"]"]
+    },
+    {
+      "id": "onsen",
+      "label": "温泉",
+      "emoji": "♨️",
+      "radius": 50,
+      "queries": [
+        "nwr[\"amenity\"=\"public_bath\"][\"bath:type\"=\"onsen\"][\"name\"]",
+        "nwr[\"natural\"=\"hot_spring\"][\"name\"]"
+      ]
+    },
+    {
+      "id": "shrine",
+      "label": "神社",
+      "emoji": "⛩️",
+      "radius": 50,
+      "queries": ["nwr[\"amenity\"=\"place_of_worship\"][\"religion\"=\"shinto\"][\"name\"]"]
+    }
+  ]
+}
