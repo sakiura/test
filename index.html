@@ -27,6 +27,7 @@
       <button id="btnIcs" class="ghost" type="button">カレンダー(.ics)</button>
       <button id="btnJson" class="ghost" type="button">JSON保存</button>
       <button id="btnPrint" class="ghost" type="button">印刷</button>
+      <button id="btnShareCfg" class="ghost" type="button" hidden>共有の設定</button>
     </div>
   </header>
 
@@ -227,6 +228,29 @@
 
   <div id="toast" class="toast" role="status" hidden></div>
 
+  <dialog id="shareDlg">
+    <form id="shareForm" autocomplete="off">
+      <h3>共有の設定</h3>
+      <p class="hint">Googleスプレッドシート(Apps Script)に保存して、複数人で同じ内容を使います。手順は docs/共有のはじめかた.md にあります。</p>
+      <label id="shUrlRow">共有サーバーのURL<span class="sub">(Apps Script の「ウェブアプリ」のURL。https://script.google.com/…/exec)</span><input id="shUrl" placeholder="https://script.google.com/macros/s/…/exec"></label>
+      <label>合言葉<span class="sub">(編集用または閲覧用。閲覧用だと見るだけになります)</span><input id="shKey" autocapitalize="off" spellcheck="false"></label>
+      <label>あなたの表示名<span class="sub">(日ごとの「更新: 〇〇」や変更履歴に出ます)</span><input id="shName" placeholder="例: 崎浦"></label>
+      <p id="shErr" class="error" hidden></p>
+      <div id="shLinks" hidden>
+        <p class="hint">共有リンク(開くだけで接続できます。合言葉が入っているので、共有する相手だけに送ってください)</p>
+        <div id="shLinkEditRow" class="link-row"><span>編集用</span><input id="shLinkEdit" readonly><button type="button" class="small" id="shCopyEdit">コピー</button></div>
+        <div id="shLinkViewRow" class="link-row"><span>閲覧用</span><input id="shLinkView" readonly><button type="button" class="small" id="shCopyView">コピー</button></div>
+      </div>
+      <div class="dlg-actions">
+        <button type="submit" class="primary">接続する</button>
+        <button type="button" id="shOff" class="ghost danger">共有をやめる</button>
+        <button type="button" id="shClose" class="ghost">閉じる</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!--SHARE-CONFIG-->
+  <script src="sync-sheet.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

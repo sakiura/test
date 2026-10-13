@@ -1305,6 +1305,7 @@
   // 文書: schedules/{id}(月ごとの設定) / days/{id}(1日分のコマ) / backlogs/{scheduleId}(未配置) /
   //       meta/genres(ジャンル) / history/{auto}(変更前の状態)。日ごとに分けて、別の日の編集がぶつからないようにする。
   let dbx = null, userx = null, myId = null, placeholder = null;
+  let provider = '', sheetInfo = null, sheetCfg = null;   // provider: claude = クレードの共有データベース / sheet = Googleスプレッドシート
   let flushing = false, flushAgain = false, needRebuild = false, initialApplied = false;
   const shadow = new Map();   // 文書パス -> こちらが把握しているサーバー側の内容
   const remote = { schedules: new Map(), days: new Map(), backlogs: new Map(), genres: null, depts: null, people: null };
@@ -1324,6 +1325,14 @@
   const isBlankDraft = (sc) => !sc.days.length && !sc.backlog.length && sc.name === DEFAULT_NAME;
   const isTyping = () => { const a = document.activeElement; return !!a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName) && !!a.closest('#daysView, #backlogList'); };
 
+  // スプレッドシート接続: 通信が切れたとき・合言葉が変わったときの表示
+  window.addEventListener('sheetdb-status', (ev) => {
+    const el = $('syncTag'), d = ev.detail;
+    if (d.ok) { if (el.dataset.net) { delete el.dataset.net; el.classList.remove('err'); el.textContent = ''; } return; }
+    el.dataset.net = '1';
+    el.classList.add('err');
+    el.textContent = d.code === 'auth' ? '合言葉が変わったようです。「共有の設定」で入れ直してください。' : '共有サーバーにつながりません。つながり次第、自動で再試行します。';
+  });
   function setSync(kind, e) {
     const el = $('syncTag');
     el.classList.toggle('err', kind === 'error');
@@ -1350,20 +1359,31 @@
     const ops = [];
     for (const [path, data] of want) { const j = stable(data); if (shadow.get(path) !== j) ops.push({ path, j }); }
     for (const path of [...shadow.keys()]) if (!want.has(path)) ops.push({ path, j: null });
-    for (const op of ops) {
+    // 書き込んだ内容を、こちらが把握しているサーバー側の状態に反映する
+    const settle = (op, at) => {
       const [kind, id] = op.path.split('/');
-      const ref = dbx.doc(op.path);
       if (op.j === null) {
-        await ref.delete();
         shadow.delete(op.path);
         if (remote[kind] instanceof Map) remote[kind].delete(id);
       } else {
-        const data = JSON.parse(op.j), at = Date.now();
-        await ref.set({ ...data, by: myId, at });
+        const data = JSON.parse(op.j);
         shadow.set(op.path, op.j);
         if (kind === 'meta') remote[id] = { data };
         else remote[kind].set(id, { data, by: myId, at });
       }
+    };
+    if (dbx.writeBatch) {
+      // スプレッドシートへの接続: 1回の通信が重いので、まとめて送る
+      const at = Date.now();
+      await dbx.writeBatch(ops.map((op) => ({ path: op.path, data: op.j === null ? null : { ...JSON.parse(op.j), by: myId, at } })));
+      ops.forEach((op) => settle(op, at));
+      return;
+    }
+    for (const op of ops) {
+      const ref = dbx.doc(op.path);
+      if (op.j === null) await ref.delete();
+      else await ref.set({ ...JSON.parse(op.j), by: myId, at: Date.now() });
+      settle(op, Date.now());
     }
   }
   async function flush() {
@@ -1484,9 +1504,11 @@
   }
 
   function renderShareBar() {
+    $('btnShareCfg').hidden = provider === 'claude' || !window.SheetDB;
     $('shareBar').hidden = mode !== 'shared';
     if (mode !== 'shared') return;
-    $('modeTag').textContent = readOnly ? '共有中・閲覧のみ' : '共有中・変更は全員に反映されます';
+    const via = provider === 'sheet' ? 'スプレッドシート' : '';
+    $('modeTag').textContent = readOnly ? `共有中${via ? `(${via})` : ''}・閲覧のみ` : `共有中${via ? `(${via})` : ''}・変更は全員に反映されます`;
     $('modeTag').classList.toggle('ro', readOnly);
     $('btnMigrate').hidden = readOnly || remote.schedules.size > 0 || !localData();
   }
@@ -1519,8 +1541,9 @@
     }
     render();
   }
-  async function startShared(db, user) {
+  async function startShared(db, user, how) {
     mode = 'shared';
+    provider = how;
     dbx = db;
     userx = user;
     myId = user ? await user.id() : null;
@@ -1542,13 +1565,62 @@
     setSync('loading');
   }
   async function start() {
-    if (!(window.claude && typeof window.claude.use === 'function')) return startLocal();
-    $('loading').hidden = false;
-    let db = null, user = null;
-    try { [db, user] = await Promise.all([window.claude.use('db'), window.claude.use('user')]); } catch (e) { db = null; }
-    if (db) return startShared(db, user);
+    let db = null, user = null, how = '', sheetErr = null, cfg = null;
+    if (window.claude && typeof window.claude.use === 'function') {
+      $('loading').hidden = false;
+      try { [db, user] = await Promise.all([window.claude.use('db'), window.claude.use('user')]); } catch (e) { db = null; }
+      if (db) how = 'claude';
+    }
+    if (!db && window.SheetDB) {
+      cfg = window.SheetDB.readConfig();
+      if (cfg && cfg.key) {
+        $('loading').hidden = false;
+        try {
+          const c = await window.SheetDB.connect(cfg);
+          db = c.db; user = c.user; how = 'sheet'; sheetInfo = c.info; sheetCfg = cfg;
+        } catch (e) { sheetErr = e; }
+      }
+    }
+    if (db) return startShared(db, user, how);
     $('loading').hidden = true;
-    return startLocal();
+    startLocal();
+    if (cfg && !cfg.key) openShareDialog('合言葉を入れてください。');
+    else if (sheetErr) openShareDialog(sheetErr.code === 'auth' ? '合言葉が違います。入れ直してください。' : `共有サーバーにつながりません(${sheetErr.message})。URLと通信状況を確認してください。`);
+  }
+
+  // ---------- 共有の設定(Googleスプレッドシート) ----------
+  function openShareDialog(msg) {
+    const saved = (window.SheetDB && window.SheetDB.loadSaved()) || {};
+    const gas = !!(window.__GAS__ && window.__GAS__.gas);
+    $('shUrlRow').hidden = gas;
+    $('shUrl').value = (sheetCfg && sheetCfg.url) || saved.url || '';
+    $('shKey').value = (sheetCfg && sheetCfg.key) || saved.key || '';
+    $('shName').value = (sheetCfg && sheetCfg.name) || saved.name || '';
+    $('shErr').textContent = msg || '';
+    $('shErr').hidden = !msg;
+    $('shOff').hidden = !(sheetCfg || saved.key);
+    const links = $('shLinks');
+    links.hidden = !(provider === 'sheet' && sheetInfo);
+    if (!links.hidden) {
+      const edit = sheetInfo.role === 'edit';
+      $('shLinkEditRow').hidden = !edit;
+      $('shLinkViewRow').hidden = !sheetInfo.viewKey;
+      if (edit) $('shLinkEdit').value = window.SheetDB.makeLink(sheetInfo.cfg, sheetInfo.cfg.key);
+      if (sheetInfo.viewKey) $('shLinkView').value = window.SheetDB.makeLink(sheetInfo.cfg, sheetInfo.viewKey);
+    }
+    $('shareDlg').showModal();
+  }
+  function reloadApp(key) {
+    const gas = window.__GAS__ && window.__GAS__.gas;
+    if (gas) {
+      try { window.top.location.href = `${window.__GAS__.execUrl}?key=${encodeURIComponent(key || '')}`; return; } catch (e) { /* 同じ画面で読み直す */ }
+    }
+    location.reload();
+  }
+  function copyField(id) {
+    const el = $(id);
+    el.select();
+    (navigator.clipboard ? navigator.clipboard.writeText(el.value) : Promise.reject()).then(() => notify('コピーしました。'), () => { try { document.execCommand('copy'); notify('コピーしました。'); } catch (e) { notify('選択した文字をコピーしてください。'); } });
   }
 
   // ---------- スケジュール管理 ----------
@@ -1706,6 +1778,22 @@
     $('importCancel').addEventListener('click', () => $('importDlg').close());
     $('btnSample').addEventListener('click', () => { $('importText').value = SAMPLE_CSV; $('importYear').value = new Date().getFullYear(); doImport(); });
     $('btnMigrate').addEventListener('click', migrateLocal);
+    $('btnShareCfg').addEventListener('click', () => openShareDialog(''));
+    $('shClose').addEventListener('click', () => $('shareDlg').close());
+    $('shCopyEdit').addEventListener('click', () => copyField('shLinkEdit'));
+    $('shCopyView').addEventListener('click', () => copyField('shLinkView'));
+    $('shOff').addEventListener('click', async () => {
+      if (!(await askConfirm('共有をやめて、このブラウザだけで使う状態に戻します。共有しているデータは消えません。', 'やめる'))) return;
+      window.SheetDB.clearConfig();
+      reloadApp('');
+    });
+    $('shareForm').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const gas = window.__GAS__ && window.__GAS__.gas, url = $('shUrl').value.trim(), key = $('shKey').value.trim();
+      if (!key || (!gas && !/^(https:\/\/|http:\/\/(localhost|127\.0\.0\.1)[:\/])/.test(url))) { $('shErr').textContent = gas ? '合言葉を入れてください。' : '共有サーバーのURL(https:// から始まるもの)と合言葉を入れてください。'; $('shErr').hidden = false; return; }
+      window.SheetDB.saveConfig({ url: gas ? window.__GAS__.execUrl : url, key, name: $('shName').value.trim() });
+      reloadApp(key);
+    });
     setupSwipe();
     start();
   }
