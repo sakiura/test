@@ -87,7 +87,7 @@
   let calMonth = null;    // 表示中の月(その月の1日)
   let calFor = null;      // calMonth がどのスケジュール用か
   const PAGE_DAYS = 5;     // 日ごと表示は5日ずつページに分ける(週ごとは1週間ずつ)
-  let dayPage = 0, pageFor = null, pageAll = false;
+  let dayPage = 0, pageFor = null, pageAll = false, slideDir = 0;
   let dayMode = '1';      // 日ごと表示の並べ方(この端末だけの設定): 1 = 縦に1日ずつ / 2 = 2日ずつ横に / week = 暦の月〜金で週ごとに
   try {
     const v = localStorage.getItem('training-schedule-cols');
@@ -239,6 +239,13 @@
     $('daysView').innerHTML = !s.days.length
       ? '<p class="empty">まだ日程がありません。「＋ 日を追加」か「取り込み」から始めてください。</p>'
       : listHtml(s);
+    if (slideDir) {
+      const el = $('daysView');
+      el.classList.remove('slide-next', 'slide-prev');
+      void el.offsetWidth; // アニメーションを再生し直す
+      el.classList.add(slideDir > 0 ? 'slide-next' : 'slide-prev');
+      slideDir = 0;
+    }
     $('backlogList').innerHTML = s.backlog.length
       ? s.backlog.map((b) => backlogHtml(s, b)).join('')
       : '<p class="hint">なし</p>';
@@ -382,6 +389,40 @@
       pages.push({ days, label: `${i + 1}〜${i + days.length}日目(${jpDate(days[0].date)}〜${jpDate(days[days.length - 1].date)})` });
     }
     return pages;
+  }
+  // dir: 1 = 次のページ / -1 = 前のページ。めくれたら true
+  function flipPage(dir) {
+    if (view !== 'list' || pageAll) return false;
+    const n = dayPage + dir;
+    if (n < 0 || n >= listPages(cur()).length) return false;
+    dayPage = n;
+    slideDir = dir;
+    render();
+    const top = $('daysView').getBoundingClientRect().top;
+    if (top < 0) $('daysView').scrollIntoView({ block: 'start' });  // 長いページの途中でめくったときは先頭へ
+    return true;
+  }
+  // フリック(タッチ)とトラックパッドの横スワイプでめくる
+  function setupSwipe() {
+    const el = $('daysView');
+    let t0 = null;
+    el.addEventListener('touchstart', (e) => {
+      const skip = e.touches.length !== 1 || e.target.closest('input, select, textarea, button, a, .grip, .day-grip, .menu');
+      const t = e.touches[0];
+      t0 = skip ? null : { x: t.clientX, y: t.clientY, at: Date.now() };
+    }, { passive: true });
+    el.addEventListener('touchend', (e) => {
+      if (!t0) return;
+      const t = e.changedTouches[0], dx = t.clientX - t0.x, dy = t.clientY - t0.y, ms = Date.now() - t0.at;
+      t0 = null;
+      if (Math.abs(dx) >= 60 && Math.abs(dx) > Math.abs(dy) * 1.5 && ms < 900) flipPage(dx < 0 ? 1 : -1);
+    }, { passive: true });
+    el.addEventListener('touchcancel', () => { t0 = null; }, { passive: true });
+    let lastWheel = 0;
+    el.addEventListener('wheel', (e) => {
+      if (Math.abs(e.deltaX) < 40 || Math.abs(e.deltaX) < Math.abs(e.deltaY) * 1.5 || Date.now() - lastWheel < 700) return;
+      if (flipPage(e.deltaX > 0 ? 1 : -1)) { lastWheel = Date.now(); e.preventDefault(); }
+    }, { passive: false });
   }
   const pageOfDay = (s, id) => listPages(s).findIndex((pg) => pg.days.some((d) => d.id === id));
   function pagerHtml(pages) {
@@ -755,8 +796,7 @@
     const act = btn.dataset.act;
     if (act === 'pg-prev' || act === 'pg-next') {
       pageAll = false;
-      dayPage += act === 'pg-next' ? 1 : -1;
-      render();
+      flipPage(act === 'pg-next' ? 1 : -1);
       $('daysView').scrollIntoView({ block: 'start' });
       return;
     }
@@ -1530,6 +1570,7 @@
     $('importCancel').addEventListener('click', () => $('importDlg').close());
     $('btnSample').addEventListener('click', () => { $('importText').value = SAMPLE_CSV; $('importYear').value = new Date().getFullYear(); doImport(); });
     $('btnMigrate').addEventListener('click', migrateLocal);
+    setupSwipe();
     start();
   }
   init();

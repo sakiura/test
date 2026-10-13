@@ -289,3 +289,11 @@ dialog select { display: block; width: 100%; margin-top: 3px; font-size: 14px; }
 .pager:last-child { margin: 12px 0 0; }
 .pager button:disabled { opacity: .4; cursor: default; }
 @media print { .pager { display: none !important; } }
+
+/* フリックでめくるときの動き */
+#daysView { touch-action: pan-y; overscroll-behavior-x: contain; }
+@keyframes slide-from-right { from { opacity: 0; transform: translateX(36px); } to { opacity: 1; transform: none; } }
+@keyframes slide-from-left { from { opacity: 0; transform: translateX(-36px); } to { opacity: 1; transform: none; } }
+#daysView.slide-next { animation: slide-from-right .22s ease-out; }
+#daysView.slide-prev { animation: slide-from-left .22s ease-out; }
+@media (prefers-reduced-motion: reduce) { #daysView.slide-next, #daysView.slide-prev { animation: none; } }
