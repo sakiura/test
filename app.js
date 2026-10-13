@@ -86,6 +86,8 @@
   let view = 'list';      // list | month | year
   let calMonth = null;    // 表示中の月(その月の1日)
   let calFor = null;      // calMonth がどのスケジュール用か
+  let dayCols = 1;        // 日ごと表示で横に並べる日数(この端末だけの設定)
+  try { dayCols = Math.min(5, Math.max(1, parseInt(localStorage.getItem('training-schedule-cols'), 10) || 1)); } catch (e) { /* 既定値 */ }
 
   // ---------- 日付・時刻 ----------
   const pad = (n) => String(n).padStart(2, '0');
@@ -237,6 +239,11 @@
       : '<p class="hint">なし</p>';
     renderSummary(s);
     $('daysView').hidden = view !== 'list';
+    $('colsWrap').hidden = view !== 'list';
+    $('colsSel').value = String(dayCols);
+    $('daysView').classList.toggle('grid', dayCols > 1);
+    $('daysView').style.setProperty('--cols', dayCols);
+    $('mainLayout').classList.toggle('wide', view === 'list' && dayCols >= 3);
     $('calView').hidden = view === 'list';
     $('calNav').hidden = view === 'list';
     $('mainLayout').classList.toggle('no-side', view === 'year');
@@ -1326,6 +1333,11 @@
     });
 
     document.querySelectorAll('.tabs button').forEach((b) => b.addEventListener('click', () => { view = b.dataset.view; render(); }));
+    $('colsSel').addEventListener('change', (e) => {
+      dayCols = Number(e.target.value) || 1;
+      try { localStorage.setItem('training-schedule-cols', String(dayCols)); } catch (err) { /* 保存できなくても動く */ }
+      render();
+    });
     $('calPrev').addEventListener('click', () => calNavigate(-1));
     $('calNext').addEventListener('click', () => calNavigate(1));
     $('calToday').addEventListener('click', () => { const t = new Date(); calMonth = new Date(t.getFullYear(), t.getMonth(), 1); if (view === 'month') syncScheduleToMonth(); render(); });

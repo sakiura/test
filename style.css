@@ -241,3 +241,28 @@ dialog select { display: block; width: 100%; margin-top: 3px; font-size: 14px; }
 .ro .blk-actions, .ro .day-actions, .ro .day-foot, .ro .grip, .ro #btnAddDay, .ro #btnAddBacklog, .ro .bulk, .ro #btnNewMonth,
 .ro #btnImport, .ro #btnDelSched, .ro #schedMonth, .ro #btnGenres, .ro [data-hist], .ro .cal-add, .ro #btnMigrate { display: none !important; }
 .ro .backlog select { display: none; }
+
+/* 日ごとを横に並べる */
+.cols-sel { display: flex; gap: 6px; align-items: center; font-size: 12px; color: var(--muted); }
+#daysView.grid { display: grid; grid-template-columns: repeat(var(--cols, 1), minmax(0, 1fr)); gap: 12px; align-items: start; }
+#daysView.grid .day { margin-bottom: 0; }
+#daysView.grid .empty { grid-column: 1 / -1; }
+.layout.wide { grid-template-columns: minmax(0, 1fr); }
+.layout.wide .backlog { position: static; }
+.layout.wide .backlog-list { grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); }
+.day { container-type: inline-size; }
+/* 幅の狭い日カード(横に並べたとき)は、コマの表示を縦に詰める */
+@container (max-width: 440px) {
+  .day-head { padding: 6px 8px; gap: 6px 8px; }
+  .day-head input[type=date] { flex: 1 1 130px; min-width: 0; }
+  .day-head .section, .day-head .venue { width: 100%; }
+  .day-head label { flex: 1 1 100%; }
+  .day-head label input { flex: 1; min-width: 0; }
+  .day-sum { margin-left: 0; flex-basis: 100%; }
+  .blocks { padding: 6px 8px; }
+  .blk { grid-template-columns: 14px 20px 1fr; gap: 4px 6px; padding: 6px; }
+  .blk > :nth-child(n+4) { grid-column: 1 / -1; }
+  .blk-time { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .blk-actions { flex-wrap: wrap; }
+  .day-foot { padding: 0 8px 8px; }
+}
