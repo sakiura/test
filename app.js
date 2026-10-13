@@ -144,7 +144,7 @@
 
   // ---------- データ ----------
   function newSchedule(name) {
-    return { id: uid(), name, month: ymOf(new Date()), days: [], backlog: [], skipHolidays: false, defaultStart: '10:00', defaultGap: 15, endLimit: '18:00', history: [] };
+    return { id: uid(), name, month: ymOf(new Date()), endDate: '', days: [], backlog: [], skipHolidays: false, defaultStart: '10:00', defaultGap: 15, endLimit: '18:00', history: [] };
   }
   function newBlock(o = {}) {
     return { id: uid(), title: '', minutes: 60, gap: 0, genre: '', dept: '', person: '', purpose: '', detail: '', materials: '', links: [],
@@ -160,6 +160,7 @@
     if (!Array.isArray(st.genres)) st.genres = DEFAULT_GENRES.map((g) => ({ ...g }));
     st.schedules.forEach((sc) => {
       sc.history = sc.history || [];
+      sc.endDate = sc.endDate || '';
       sc.month = sc.month || (sc.days && sc.days[0] ? sc.days[0].date.slice(0, 7) : ymOf(new Date()));
       if (!st.ver || st.ver < 3) sc.skipHolidays = false; // 祝日も研修を行う
     });
@@ -195,7 +196,7 @@
       }
     }
   }
-  const contentOf = (sc) => ({ name: sc.name, month: sc.month, days: sc.days, backlog: sc.backlog,
+  const contentOf = (sc) => ({ name: sc.name, month: sc.month, endDate: sc.endDate || '', days: sc.days, backlog: sc.backlog,
     skipHolidays: sc.skipHolidays, defaultStart: sc.defaultStart, defaultGap: sc.defaultGap, endLimit: sc.endLimit });
   const contentJson = (sc) => JSON.stringify(contentOf(sc), (k, v) => (k && k[0] === '_' ? undefined : v));
   const lastJson = new Map();
@@ -281,6 +282,8 @@
     $('schedPrev').disabled = i <= 0;
     $('schedNext').disabled = i >= list.length - 1;
     $('schedMonth').value = s.month;
+    $('schedEnd').value = s.endDate || '';
+    $('schedEnd').disabled = readOnly;
     $('pastTag').hidden = s.month >= ymOf(new Date());
     if (document.activeElement !== $('schedName')) $('schedName').value = s.name;
     $('setSkipHol').checked = !!s.skipHolidays;
@@ -309,7 +312,7 @@
     const mins = s.days.reduce((n, d) => n + d.blocks.reduce((m, b) => m + (Number(b.minutes) || 0), 0), 0);
     const done = s.days.reduce((n, d) => n + d.blocks.filter((b) => b.done).length, 0);
     $('summary').textContent = s.days.length
-      ? `${s.days.length}日 / ${blocks}コマ(完了${done}) / 合計${(mins / 60).toFixed(1)}時間 / ${jpDate(s.days[0].date)}〜${jpDate(s.days[s.days.length - 1].date)}`
+      ? `${s.days.length}日 / ${blocks}コマ(完了${done}) / 合計${(mins / 60).toFixed(1)}時間 / ${jpDate(s.days[0].date)}〜${jpDate(s.days[s.days.length - 1].date)}${s.endDate ? ` / 研修終了日 ${jpDate(s.endDate)}` : ''}`
       : '';
   }
 
@@ -322,6 +325,10 @@
       const r = restLabel(d.date);
       if (r) msgs.push(`${jpDate(d.date)} は${r}です(研修日は基本平日です。意図した日なら、そのままで構いません)`);
     });
+    if (s.endDate) {
+      const after = s.days.filter((d) => d.date > s.endDate);
+      if (after.length) msgs.push(`研修終了日(${jpDate(s.endDate)})より後に研修日が${after.length}日あります: ${after.map((d) => jpDate(d.date)).join('、')}`);
+    }
     const el = $('banner');
     el.hidden = !msgs.length;
     el.innerHTML = msgs.length ? '<b>⚠ 確認してください</b><ul>' + msgs.map((m) => `<li>${esc(m)}</li>`).join('') + '</ul>' : '';
@@ -340,7 +347,7 @@
       <div class="day-head">
         <span class="day-grip" title="ドラッグで日付を移動(別の日とは入れ替え)">⋮⋮</span>
         <input type="date" data-f="date" value="${esc(d.date)}" aria-label="日付">
-        <span class="dow dow-${dow}">(${DOW[dow]})</span>${HOLIDAY_NAMES[d.date] ? `<span class="hol-tag">${esc(HOLIDAY_NAMES[d.date])}</span>` : ''}
+        <span class="dow dow-${dow}">(${DOW[dow]})</span>${HOLIDAY_NAMES[d.date] ? `<span class="hol-tag">${esc(HOLIDAY_NAMES[d.date])}</span>` : ''}${d.date === s.endDate ? '<span class="end-tag">研修終了日</span>' : ''}
         <input class="section" data-f="section" value="${esc(d.section)}" placeholder="区分(例: 営業研修)" aria-label="区分">
         <label>会場<input class="venue" data-f="venue" value="${esc(d.venue)}" placeholder="例: 本社 会議室A"></label>
         <label>開始<input type="time" data-f="start" value="${esc(d.start)}"></label>
@@ -567,12 +574,12 @@
         const days = by.get(key) || [];
         if (days.length && d.getMonth() === mo) any = true;
         const hol = HOLIDAY_NAMES[key] || '';
-        const cls = ['cal-cell', d.getMonth() !== mo ? 'out' : '', days.length ? 'has' : '', key === todayKey ? 'today' : ''].filter(Boolean).join(' ');
+        const cls = ['cal-cell', d.getMonth() !== mo ? 'out' : '', days.length ? 'has' : '', key === todayKey ? 'today' : '', key === s.endDate ? 'endday' : ''].filter(Boolean).join(' ');
         const lines = [];
         days.forEach((day) => layout(day).forEach(({ b, s: bs }) => lines.push({ b, bs })));
         const MAX = 5;
         row += `<div class="${cls}" data-caldate="${key}"${days.length ? ` data-calday="${days[0].id}"${readOnly ? '' : ' draggable="true"'} title="クリックで詳細 / ドラッグで日付を移動"` : ''}>
-          <div class="cal-top"><span class="cal-num dow-${hol ? 0 : wd}">${d.getDate()}</span>${hol ? `<span class="cal-hol">${esc(hol)}</span>` : ''}
+          <div class="cal-top"><span class="cal-num dow-${hol ? 0 : wd}">${d.getDate()}</span>${hol ? `<span class="cal-hol">${esc(hol)}</span>` : ''}${key === s.endDate ? '<span class="cal-end">研修終了</span>' : ''}
             ${days.length ? '' : `<button type="button" class="cal-add" data-act="cal-add" data-date="${key}" aria-label="${d.getMonth() + 1}月${d.getDate()}日に研修日を追加">＋</button>`}</div>
           ${days.map((day) => `${day.section ? `<div class="cal-sec">${esc(day.section)}</div>` : ''}${day.venue ? `<div class="cal-venue">${esc(day.venue)}</div>` : ''}`).join('')}
           ${lines.slice(0, MAX).map(({ b, bs }) => `<div class="cal-line${b.done ? ' done' : ''}${b.test ? ' test' : ''}${matchGenre(b) ? '' : ' dim'}"${b.genre ? ` style="--g:${genreColor(b.genre)}"` : ''}><span class="dot"></span><span class="t">${fmtMin(bs)}</span> ${esc(b.title)}</div>`).join('')}
@@ -602,7 +609,8 @@
         const tip = days.length
           ? `${jpDate(key)} ${days.map((x) => { const t = layout(x); return `${t.length ? fmtMin(t[0].s) + '–' + fmtMin(t[t.length - 1].e) : ''} ${x.venue || ''} ${x.blocks.length}コマ`; }).join(' / ')}`
           : hol ? `${jpDate(key)} ${hol}` : '';
-        cells += `<span class="mc dow-${hol ? 0 : d.getDay()}${days.length ? ' has' : ''}${key === todayKey ? ' today' : ''}"${tip ? ` title="${esc(tip)}"` : ''}>${day}</span>`;
+        const isEnd = store.schedules.some((sc) => sc.endDate === key);
+        cells += `<span class="mc dow-${hol ? 0 : d.getDay()}${days.length ? ' has' : ''}${key === todayKey ? ' today' : ''}${isEnd ? ' endd' : ''}"${tip || isEnd ? ` title="${esc((tip ? tip + ' ' : '') + (isEnd ? '研修終了日' : ''))}"` : ''}>${day}</span>`;
       }
       html += `<button type="button" class="mini" data-month="${mo}"><h4>${mo + 1}月<small>${count ? `研修${count}日` : ''}</small></h4><div class="mini-grid">${cells}</div></button>`;
     }
@@ -667,6 +675,7 @@
       [...list].reverse().map((x) => `<option value="${x.id}">${esc(monthLabel(x.month))}　${esc(x.name || '(無題)')}</option>`).join('');
     $('mSource').value = latest ? latest.id : '';
     nameDirty = false;
+    endDirty = false;
     $('mName').value = `${$('mMonth').value.replace('-', '')}スケジュール`;
     updateMonthPreview();
     $('monthDlg').showModal();
@@ -676,16 +685,19 @@
     if (!ym) return null;
     return buildMonthSchedule(store.schedules.find((x) => x.id === $('mSource').value), ym, $('mName').value.trim());
   }
+  let endDirty = false;
   function updateMonthPreview() {
     const sc = monthDraft(), el = $('mPreview');
     if (!sc) { el.textContent = '対象月を選んでください。'; return; }
+    if (!endDirty) $('mEnd').value = sc.days.length ? sc.days[sc.days.length - 1].date : '';
     const blocks = sc.days.reduce((n, d) => n + d.blocks.length, 0);
     const spill = sc.days.filter((d) => d.date.slice(0, 7) !== sc.month).length;
     const dup = store.schedules.some((x) => x.month === sc.month);
-    el.className = 'preview' + (spill || dup ? ' warn' : '');
+    const endV = $('mEnd').value, late = endV ? sc.days.filter((d) => d.date > endV).length : 0;
+    el.className = 'preview' + (spill || dup || late ? ' warn' : '');
     el.textContent = sc.days.length
       ? `${sc.days.length}日 / ${blocks}コマ(${jpDate(sc.days[0].date)}〜${jpDate(sc.days[sc.days.length - 1].date)})`
-        + (spill ? ` ※月末を超える日が${spill}日あります。` : '') + (dup ? ` ※${monthLabel(sc.month)}のスケジュールは既にあります(別に追加されます)。` : '')
+        + (spill ? ` ※月末を超える日が${spill}日あります。` : '') + (late ? ` ※研修終了日より後の日が${late}日あります。` : '') + (dup ? ` ※${monthLabel(sc.month)}のスケジュールは既にあります(別に追加されます)。` : '')
       : '空のスケジュールを作成します。' + (dup ? ` ※${monthLabel(sc.month)}のスケジュールは既にあります。` : '');
   }
 
@@ -1238,7 +1250,7 @@
   });
   const normBlock = (b) => ({ ...newBlock(), ...b });
   const canon = {
-    schedules: (d) => ({ name: d.name || '', month: d.month || ymOf(new Date()), skipHolidays: !!d.skipHolidays,
+    schedules: (d) => ({ name: d.name || '', month: d.month || ymOf(new Date()), endDate: d.endDate || '', skipHolidays: !!d.skipHolidays,
       defaultStart: d.defaultStart || '10:00', defaultGap: Number.isFinite(d.defaultGap) ? d.defaultGap : 15, endLimit: d.endLimit || '18:00' }),
     days: (d) => ({ sid: d.sid, date: d.date, venue: d.venue || '', start: d.start || '10:00', section: d.section || '', blocks: (d.blocks || []).map(normBlock) }),
     backlogs: (d) => ({ blocks: (d.blocks || []).map(normBlock) }),
@@ -1410,7 +1422,17 @@
     notify('共有に移しました。');
   }
 
-  function startLocal() { mode = 'local'; render(); }
+  function startLocal() {
+    mode = 'local';
+    // デモ用ページだけ: 空のときにサンプルを自動で入れる(window.__DEMO_CSV__ はデモのビルドが定義する)
+    if (typeof window.__DEMO_CSV__ === 'function' && !cur().days.length && !cur().backlog.length) {
+      const sample = parseSheetRows(parseDelimited(window.__DEMO_CSV__(), ','), new Date().getFullYear());
+      Object.assign(cur(), { name: '新入社員研修(サンプル)', days: sample.days, backlog: sample.backlog, month: sample.days[0].date.slice(0, 7), endDate: sample.days[sample.days.length - 1].date });
+      lastJson.set(cur().id, contentJson(cur()));
+      save();
+    }
+    render();
+  }
   async function startShared(db, user) {
     mode = 'shared';
     dbx = db;
@@ -1447,18 +1469,21 @@
     };
     $('schedPrev').addEventListener('click', step(-1));
     $('schedNext').addEventListener('click', step(1));
+    $('schedEnd').addEventListener('change', (e) => { cur().endDate = e.target.value; commit(); });
     $('schedMonth').addEventListener('change', (e) => { if (e.target.value) { cur().month = e.target.value; calFor = null; commit(); } });
     $('schedName').addEventListener('input', (e) => { cur().name = e.target.value; save(); fillSchedSelect(cur()); });
     $('btnNewMonth').addEventListener('click', openMonthDialog);
     $('mMonth').addEventListener('change', () => { if (!nameDirty) $('mName').value = `${$('mMonth').value.replace('-', '')}スケジュール`; updateMonthPreview(); });
     $('mName').addEventListener('input', () => { nameDirty = true; });
     $('mSource').addEventListener('change', updateMonthPreview);
+    $('mEnd').addEventListener('input', () => { endDirty = true; updateMonthPreview(); });
     $('monthCancel').addEventListener('click', () => $('monthDlg').close());
     $('monthForm').addEventListener('submit', (e) => {
       e.preventDefault();
       const sc = monthDraft();
       if (!sc) return;
       sc.name = sc.name || `${sc.month.replace('-', '')}スケジュール`;
+      sc.endDate = $('mEnd').value || '';
       store.schedules.push(sc);
       store.currentId = sc.id;
       calFor = null;

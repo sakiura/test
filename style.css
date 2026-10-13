@@ -297,3 +297,10 @@ dialog select { display: block; width: 100%; margin-top: 3px; font-size: 14px; }
 #daysView.slide-next { animation: slide-from-right .22s ease-out; }
 #daysView.slide-prev { animation: slide-from-left .22s ease-out; }
 @media (prefers-reduced-motion: reduce) { #daysView.slide-next, #daysView.slide-prev { animation: none; } }
+
+/* 研修終了日 */
+.end-date { display: flex; gap: 4px; align-items: center; font-size: 12px; color: var(--muted); }
+.end-tag { font-size: 11px; color: #fff; background: var(--danger); border-radius: 99px; padding: 0 8px; }
+.cal-end { font-size: 10px; color: #fff; background: var(--danger); border-radius: 4px; padding: 0 4px; line-height: 1.4; }
+.cal-cell.endday { box-shadow: inset 0 -3px 0 var(--danger); }
+.mc.endd { box-shadow: inset 0 -3px 0 var(--danger); }
