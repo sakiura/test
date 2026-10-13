@@ -24,6 +24,12 @@
     { name: '顧客理解', color: '#d9479b' }, { name: '自己理解', color: '#8b6f47' }, { name: 'マインドセット', color: '#e0662f' },
     { name: 'キャッチの技術', color: '#5f8f1a' }, { name: '査定の技術', color: '#1f6f8b' }, { name: 'その他', color: '#7b8494' },
   ];
+  // プルダウンの一覧(後から追加・名前変更・並べ替えができる)
+  const MASTERS = {
+    depts: { field: 'dept', title: '担当部署',
+      defaults: ['イネーブル', '総務/経理', '人事', 'コンプラ部', '社長', '商品部', '総務/事務', '営業事務', 'FC部', '経理'] },
+    people: { field: 'person', title: '担当者', defaults: ['崎浦'] },
+  };
   // 取り込み時、ジャンル列が無いコマはタイトル・目的から推測する(あとで直せる)
   const GENRE_RULES = [
     [/オリエン|レク|朝礼|ランチ|昼食|休憩|振り返り|アンケート|テスト|ロープレ/, 'その他'],
@@ -158,6 +164,7 @@
       st = { currentId: sc.id, schedules: [sc] };
     }
     if (!Array.isArray(st.genres)) st.genres = DEFAULT_GENRES.map((g) => ({ ...g }));
+    Object.entries(MASTERS).forEach(([k, m]) => { if (!Array.isArray(st[k])) st[k] = m.defaults.slice(); });
     st.schedules.forEach((sc) => {
       sc.history = sc.history || [];
       sc.endDate = sc.endDate || '';
@@ -302,7 +309,7 @@
     let html = '<span class="hint" style="margin:0">ジャンル:</span>';
     html += names.filter((n) => tot.has(n)).map((n) =>
       chip(n || '__none', n || '未設定', n ? genreColor(n) : '#7b8494', tot.get(n), genreFilter === (n || '__none'))).join('');
-    html += `<button type="button" class="small" id="btnGenres">ジャンル設定</button>`;
+    html += `<button type="button" class="small" id="btnGenres">ジャンル設定</button><button type="button" class="small" id="btnDepts">担当部署の設定</button><button type="button" class="small" id="btnPeople">担当者の設定</button>`;
     if (genreFilter) html += `<button type="button" class="small" data-genre="">絞り込みを解除</button>`;
     $('genreBar').innerHTML = html;
   }
@@ -733,6 +740,48 @@
     render();
   }
 
+  // ---------- 担当部署・担当者の一覧 ----------
+  function fillMasterOptions(selId, kind, value) {
+    const names = store[kind].slice();
+    if (value && !names.includes(value)) names.push(value); // 一覧にない値(取り込みなど)も選択肢に残す
+    $(selId).innerHTML = '<option value="">(未設定)</option>' + names.map((n) => `<option>${esc(n)}</option>`).join('');
+    $(selId).value = value || '';
+  }
+  let masterKind = null, masterRows = [];
+  function openMasterDialog(kind) {
+    masterKind = kind;
+    masterRows = store[kind].map((n) => ({ orig: n, name: n }));
+    $('masterTitle').textContent = `${MASTERS[kind].title}の設定`;
+    renderMasterRows();
+    $('masterDlg').showModal();
+  }
+  function renderMasterRows() {
+    $('masterRows').innerHTML = masterRows.map((r, i) => `<div class="master-row">
+      <input data-mi="${i}" value="${esc(r.name)}" placeholder="${esc(MASTERS[masterKind].title)}の名前" aria-label="名前">
+      <button type="button" class="small" data-mup="${i}" aria-label="上へ"${i === 0 ? ' disabled' : ''}>↑</button>
+      <button type="button" class="small" data-mdown="${i}" aria-label="下へ"${i === masterRows.length - 1 ? ' disabled' : ''}>↓</button>
+      <button type="button" class="small danger" data-mdel="${i}">削除</button></div>`).join('');
+    // コマで使われているが一覧にない名前(シートの取り込みなど)を、ワンクリックで追加できるようにする
+    const field = MASTERS[masterKind].field, have = new Set(masterRows.map((r) => r.name.trim()).filter(Boolean)), used = new Set();
+    store.schedules.forEach((sc) => [...sc.days.flatMap((d) => d.blocks), ...sc.backlog].forEach((b) => { if (b[field] && !have.has(b[field])) used.add(b[field]); }));
+    $('masterUnlisted').innerHTML = used.size
+      ? `<span>使われているが一覧にない名前:</span>${[...used].map((n) => `<button type="button" class="small" data-madd="${esc(n)}">＋ ${esc(n)}</button>`).join('')}` : '';
+  }
+  function saveMaster() {
+    const seen = new Set(), rows = [];
+    masterRows.forEach((r) => { const name = r.name.trim(); if (name && !seen.has(name)) { seen.add(name); rows.push({ ...r, name }); } });
+    const field = MASTERS[masterKind].field, renames = new Map(rows.filter((r) => r.orig && r.orig !== r.name).map((r) => [r.orig, r.name]));
+    if (renames.size) {
+      store.schedules.forEach((sc) => [...sc.days.flatMap((d) => d.blocks), ...sc.backlog].forEach((b) => { if (renames.has(b[field])) b[field] = renames.get(b[field]); }));
+    }
+    const selId = masterKind === 'depts' ? 'eDept' : 'ePerson', editing = $('blockDlg').open;
+    const sel = editing ? $(selId).value : '';
+    store[masterKind] = rows.map((r) => r.name);
+    $('masterDlg').close();
+    if (editing) fillMasterOptions(selId, masterKind, renames.get(sel) || sel);
+    commit();
+  }
+
   // ---------- ジャンル設定 ----------
   let genreRows = [];
   function renderGenreRows() {
@@ -1002,6 +1051,8 @@
     const isNew = !block;
     const b = block || newBlock({ gap: s.defaultGap });
     editing = { id: isNew ? null : b.id, target };
+    fillMasterOptions('eDept', 'depts', b.dept);
+    fillMasterOptions('ePerson', 'people', b.person);
     const names = store.genres.map((g) => g.name);
     if (b.genre && !names.includes(b.genre)) names.push(b.genre);
     $('eGenre').innerHTML = '<option value="">(未設定)</option>' + names.map((n) => `<option>${esc(n)}</option>`).join('');
@@ -1241,8 +1292,8 @@
   let dbx = null, userx = null, myId = null, placeholder = null;
   let flushing = false, flushAgain = false, needRebuild = false, initialApplied = false;
   const shadow = new Map();   // 文書パス -> こちらが把握しているサーバー側の内容
-  const remote = { schedules: new Map(), days: new Map(), backlogs: new Map(), genres: null };
-  const loaded = { schedules: false, days: false, backlogs: false, genres: false };
+  const remote = { schedules: new Map(), days: new Map(), backlogs: new Map(), genres: null, depts: null, people: null };
+  const loaded = { schedules: false, days: false, backlogs: false, genres: false, depts: false, people: false };
   const clone = (o) => JSON.parse(JSON.stringify(o));
   const stable = (v) => JSON.stringify(v, (k, x) => {
     if (k && k[0] === '_') return undefined;
@@ -1279,6 +1330,8 @@
       if (sc.backlog.length || shadow.has(`backlogs/${sc.id}`)) want.set(`backlogs/${sc.id}`, canon.backlogs({ blocks: sc.backlog }));
     });
     want.set('meta/genres', { list: store.genres });
+    want.set('meta/depts', { list: store.depts });
+    want.set('meta/people', { list: store.people });
     const ops = [];
     for (const [path, data] of want) { const j = stable(data); if (shadow.get(path) !== j) ops.push({ path, j }); }
     for (const path of [...shadow.keys()]) if (!want.has(path)) ops.push({ path, j: null });
@@ -1293,7 +1346,7 @@
         const data = JSON.parse(op.j), at = Date.now();
         await ref.set({ ...data, by: myId, at });
         shadow.set(op.path, op.j);
-        if (kind === 'meta') remote.genres = { data };
+        if (kind === 'meta') remote[id] = { data };
         else remote[kind].set(id, { data, by: myId, at });
       }
     }
@@ -1325,6 +1378,13 @@
     loaded[kind] = true;
     if (changed || !initialApplied) applyRemote();
   }
+  const onMaster = (kind) => (snapshot) => {
+    const prev = remote[kind] ? stable(remote[kind].data) : null;
+    const { by, at, ...rest } = snapshot.exists ? clone(snapshot.data()) : {};
+    remote[kind] = snapshot.exists && Array.isArray(rest.list) ? { data: { list: rest.list } } : null;
+    loaded[kind] = true;
+    if ((remote[kind] ? stable(remote[kind].data) : null) !== prev || !initialApplied) applyRemote();
+  };
   function onGenres(snapshot) {
     const prev = remote.genres ? stable(remote.genres.data) : null;
     const { by, at, ...rest } = snapshot.exists ? clone(snapshot.data()) : {};
@@ -1350,6 +1410,7 @@
       sc.backlog = bl ? bl.data.blocks : [];
     });
     if (remote.genres) store.genres = remote.genres.data.list;
+    ['depts', 'people'].forEach((k) => { if (remote[k]) store[k] = remote[k].data.list; });
     if (!scheds.length) { placeholder = placeholder || newSchedule(DEFAULT_NAME); scheds.push(placeholder); }
     store.schedules = scheds;
     let saved = prevCur;
@@ -1361,6 +1422,7 @@
     remote.days.forEach(({ data }, id) => shadow.set(`days/${id}`, stable(data)));
     remote.backlogs.forEach(({ data }, id) => shadow.set(`backlogs/${id}`, stable(data)));
     if (remote.genres) shadow.set('meta/genres', stable(remote.genres.data));
+    ['depts', 'people'].forEach((k) => { if (remote[k]) shadow.set(`meta/${k}`, stable(remote[k].data)); });
     store.schedules.forEach((sc) => lastJson.set(sc.id, contentJson(sc)));
     initialApplied = true;
     setSync('');
@@ -1417,6 +1479,7 @@
     if (!st || !(await askConfirm('このブラウザに保存されているスケジュールを、共有データに移します。\n共有を開いている全員に表示されます。', '共有に移す'))) return;
     store.schedules = st.schedules.map((sc) => ({ ...newSchedule(sc.name || ''), ...sc, history: [] }));
     if (Array.isArray(st.genres)) store.genres = st.genres;
+    ['depts', 'people'].forEach((k) => { if (Array.isArray(st[k])) store[k] = st[k]; });
     store.currentId = store.schedules[0].id;
     commit();
     notify('共有に移しました。');
@@ -1443,11 +1506,14 @@
     store.schedules = [placeholder];
     store.currentId = placeholder.id;
     store.genres = DEFAULT_GENRES.map((g) => ({ ...g }));
+    Object.entries(MASTERS).forEach(([k, m]) => { store[k] = m.defaults.slice(); });
     const fail = (e) => { setSync('error', e); if (e && e.code === 'revoked') { readOnly = true; render(); } };
     db.collection('schedules').onSnapshot((x) => onDocs('schedules', x), fail);
     db.collection('days').onSnapshot((x) => onDocs('days', x), fail);
     db.collection('backlogs').onSnapshot((x) => onDocs('backlogs', x), fail);
     db.doc('meta/genres').onSnapshot(onGenres, fail);
+    db.doc('meta/depts').onSnapshot(onMaster('depts'), fail);
+    db.doc('meta/people').onSnapshot(onMaster('people'), fail);
     render();
     setSync('loading');
   }
@@ -1495,11 +1561,31 @@
     $('histList').addEventListener('click', (e) => { const b = e.target.closest('[data-hist]'); if (b) restoreSnap(Number(b.dataset.hist)); });
     $('genreBar').addEventListener('click', (e) => {
       if (e.target.closest('#btnGenres')) return openGenreDialog();
+      if (e.target.closest('#btnDepts')) return openMasterDialog('depts');
+      if (e.target.closest('#btnPeople')) return openMasterDialog('people');
       const c = e.target.closest('[data-genre]');
       if (c) { genreFilter = genreFilter === c.dataset.genre ? '' : c.dataset.genre; render(); }
     });
     $('genreRows').addEventListener('input', (e) => { const t = e.target; if (t.dataset.gi) genreRows[t.dataset.gi][t.dataset.gf] = t.value; });
     $('genreRows').addEventListener('click', (e) => { const b = e.target.closest('[data-gdel]'); if (b) { genreRows.splice(Number(b.dataset.gdel), 1); renderGenreRows(); } });
+    $('btnDeptEdit').addEventListener('click', () => openMasterDialog('depts'));
+    $('btnPersonEdit').addEventListener('click', () => openMasterDialog('people'));
+    $('masterRows').addEventListener('input', (e) => { if (e.target.dataset.mi !== undefined) masterRows[e.target.dataset.mi].name = e.target.value; });
+    const moveRow = (i, j) => { [masterRows[i], masterRows[j]] = [masterRows[j], masterRows[i]]; renderMasterRows(); };
+    $('masterRows').addEventListener('click', (e) => {
+      const b = e.target.closest('button');
+      if (!b) return;
+      if (b.dataset.mup !== undefined) moveRow(Number(b.dataset.mup), Number(b.dataset.mup) - 1);
+      else if (b.dataset.mdown !== undefined) moveRow(Number(b.dataset.mdown), Number(b.dataset.mdown) + 1);
+      else if (b.dataset.mdel !== undefined) { masterRows.splice(Number(b.dataset.mdel), 1); renderMasterRows(); }
+    });
+    $('masterUnlisted').addEventListener('click', (e) => {
+      const b = e.target.closest('[data-madd]');
+      if (b) { masterRows.push({ orig: '', name: b.dataset.madd }); renderMasterRows(); }
+    });
+    $('masterAdd').addEventListener('click', () => { masterRows.push({ orig: '', name: '' }); renderMasterRows(); const ins = $('masterRows').querySelectorAll('input'); ins[ins.length - 1].focus(); });
+    $('masterCancel').addEventListener('click', () => $('masterDlg').close());
+    $('masterForm').addEventListener('submit', (e) => { e.preventDefault(); saveMaster(); });
     $('genreAdd').addEventListener('click', () => { genreRows.push({ orig: '', name: '', color: '#7b8494' }); renderGenreRows(); });
     $('genreCancel').addEventListener('click', () => $('genreDlg').close());
     $('genreForm').addEventListener('submit', (e) => { e.preventDefault(); saveGenres(); });

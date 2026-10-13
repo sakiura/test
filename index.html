@@ -116,8 +116,8 @@
       </div>
       <label>ジャンル<select id="eGenre"></select></label>
       <div class="grid2">
-        <label>担当(部署)<input id="eDept"></label>
-        <label>担当者<input id="ePerson"></label>
+        <label>担当(部署)<span class="inline-actions"><select id="eDept"></select><button type="button" class="small" id="btnDeptEdit">追加・編集</button></span></label>
+        <label>担当者<span class="inline-actions"><select id="ePerson"></select><button type="button" class="small" id="btnPersonEdit">追加・編集</button></span></label>
       </div>
       <label>目的<input id="ePurpose"></label>
       <label>詳細<textarea id="eDetail" rows="3"></textarea></label>
@@ -181,6 +181,20 @@
     <p class="hint">このスケジュールの変更前の状態です(編集のたび、または大きな操作の前に自動で残ります)。選ぶと、その時点の状態に戻せます。戻す前の状態も履歴に残ります。</p>
     <ul id="histList" class="hist"></ul>
     <div class="dlg-actions"><button type="button" id="histClose" class="ghost">閉じる</button></div>
+  </dialog>
+
+  <dialog id="masterDlg">
+    <form id="masterForm" autocomplete="off">
+      <h3 id="masterTitle">一覧の設定</h3>
+      <p class="hint">コマの入力画面のプルダウンに出る一覧です。名前を変えると、すべてのスケジュールの該当コマも変わります。</p>
+      <div id="masterRows"></div>
+      <button type="button" id="masterAdd" class="small">＋ 追加</button>
+      <div id="masterUnlisted" class="unlisted"></div>
+      <div class="dlg-actions">
+        <button type="submit" class="primary">保存</button>
+        <button type="button" id="masterCancel" class="ghost">キャンセル</button>
+      </div>
+    </form>
   </dialog>
 
   <dialog id="genreDlg">
