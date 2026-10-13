@@ -9,10 +9,14 @@
 <body>
   <header class="topbar">
     <div class="top-left">
+      <button id="schedPrev" class="ghost" type="button" aria-label="前の月のスケジュール">&lt;</button>
       <select id="schedSelect" aria-label="スケジュール切替"></select>
+      <button id="schedNext" class="ghost" type="button" aria-label="次の月のスケジュール">&gt;</button>
+      <input id="schedMonth" type="month" aria-label="対象月">
       <input id="schedName" class="sched-name" aria-label="スケジュール名" placeholder="スケジュール名(例: 202610スケジュール)">
-      <button id="btnNewSched" class="ghost" type="button">新規</button>
-      <button id="btnDupSched" class="ghost" type="button" title="日付をずらして来月分を作るときに便利">複製</button>
+      <span id="pastTag" class="past-tag" hidden>過去の月</span>
+      <button id="btnNewMonth" class="primary" type="button">＋ 月を追加</button>
+      <button id="btnHistory" class="ghost" type="button">変更履歴</button>
       <button id="btnDelSched" class="ghost danger" type="button">削除</button>
     </div>
     <div class="actions">
@@ -41,7 +45,7 @@
         </div>
         <hr>
         <div class="bulk-row">
-          <label><input id="setSkipHol" type="checkbox"> ずらすとき祝日を飛ばす</label>
+          <label><input id="setSkipHol" type="checkbox"> ずらすとき・月を追加するとき祝日を飛ばす(通常はオフ。祝日も研修を行う)</label>
         </div>
         <div class="bulk-row">
           <label>標準の開始時刻 <input id="setStart" type="time"></label>
@@ -63,10 +67,12 @@
       <strong id="calLabel"></strong>
       <button id="calNext" type="button" class="ghost" aria-label="次へ">&gt;</button>
       <button id="calToday" type="button" class="ghost">今日</button>
-      <button id="calFirst" type="button" class="ghost">研修開始月</button>
+      <button id="calFirst" type="button" class="ghost">このスケジュールの月</button>
+      <label class="wk"><input id="calWeekend" type="checkbox"> 土日も表示</label>
       <span id="calStat" class="summary"></span>
     </div>
   </div>
+  <div id="genreBar" class="genre-bar" aria-label="ジャンル"></div>
   <div id="banner" class="banner" hidden></div>
 
   <main id="mainLayout" class="layout">
@@ -91,6 +97,7 @@
         <label>前との空き(分)<input id="eGap" type="number" min="0" step="5"></label>
         <label>会場(この回のみ)<input id="eVenue" placeholder="日の会場と同じなら空欄"></label>
       </div>
+      <label>ジャンル<select id="eGenre"></select></label>
       <div class="grid2">
         <label>担当(部署)<input id="eDept"></label>
         <label>担当者<input id="ePerson"></label>
@@ -126,6 +133,44 @@
         <button type="submit" class="primary">取り込む</button>
         <button type="button" id="btnSample" class="ghost">サンプルを作成</button>
         <button type="button" id="importCancel" class="ghost">閉じる</button>
+      </div>
+    </form>
+  </dialog>
+
+
+  <dialog id="monthDlg">
+    <form id="monthForm" autocomplete="off">
+      <h3>月のスケジュールを追加</h3>
+      <p class="hint">前の月のスケジュールをひな形にコピーして、平日に日付を割り振ります(祝日の扱いは「日程の一括変更・設定」で変更できます)。以前の月はそのまま残ります。</p>
+      <div class="grid2">
+        <label>対象月<input id="mMonth" type="month" required></label>
+        <label>スケジュール名<input id="mName" required></label>
+      </div>
+      <label>ひな形<select id="mSource"></select></label>
+      <p id="mPreview" class="preview"></p>
+      <div class="dlg-actions">
+        <button type="submit" class="primary">追加する</button>
+        <button type="button" id="monthCancel" class="ghost">キャンセル</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="histDlg">
+    <h3>変更履歴</h3>
+    <p class="hint">このスケジュールの変更前の状態です(編集のたび、または大きな操作の前に自動で残ります)。選ぶと、その時点の状態に戻せます。戻す前の状態も履歴に残ります。</p>
+    <ul id="histList" class="hist"></ul>
+    <div class="dlg-actions"><button type="button" id="histClose" class="ghost">閉じる</button></div>
+  </dialog>
+
+  <dialog id="genreDlg">
+    <form id="genreForm" autocomplete="off">
+      <h3>ジャンル設定</h3>
+      <p class="hint">コマの分類です。名前を変えると、すべてのスケジュールの該当コマも変わります。</p>
+      <div id="genreRows"></div>
+      <button type="button" id="genreAdd" class="small">＋ ジャンルを追加</button>
+      <div class="dlg-actions">
+        <button type="submit" class="primary">保存</button>
+        <button type="button" id="genreCancel" class="ghost">キャンセル</button>
       </div>
     </form>
   </dialog>

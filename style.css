@@ -101,9 +101,10 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--primary); o
 .blocks.drop-target, .backlog-list.drop-target { outline: 2px dashed var(--primary); outline-offset: -4px; border-radius: 6px; }
 .blk {
   display: grid; grid-template-columns: 18px 22px 128px 1fr auto auto; gap: 8px; align-items: center;
-  padding: 6px 8px; border: 1px solid var(--line); border-left: 4px solid var(--primary); border-radius: 6px; background: var(--panel);
+  padding: 6px 8px; border: 1px solid var(--line); border-left: 4px solid var(--g, var(--primary)); border-radius: 6px; background: var(--panel);
 }
-.blk.done { opacity: .6; border-left-color: var(--ok); }
+.blk.done { opacity: .6; }
+.blk.dim, .cal-line.dim { opacity: .22; }
 .blk.dragging { opacity: .35; }
 .blk.insert-before { box-shadow: 0 -3px 0 0 var(--primary); }
 .blocks.insert-end { box-shadow: inset 0 -3px 0 0 var(--primary); }
@@ -196,3 +197,24 @@ dialog label.inline { display: flex; gap: 6px; align-items: center; }
 .mc.has { background: var(--hl); box-shadow: inset 0 0 0 1px var(--hl-line); font-weight: 700; }
 .mc.today { outline: 2px solid var(--primary); }
 @media print { .viewbar { display: none !important; } }
+
+/* 月の追加・履歴・ジャンル */
+.past-tag { font-size: 11px; border: 1px solid var(--muted); color: var(--muted); border-radius: 99px; padding: 0 8px; }
+.top-left input[type=month] { width: 140px; }
+.genre-bar { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 10px 16px 0; }
+.chip { display: inline-flex; gap: 6px; align-items: center; border-radius: 99px; padding: 2px 10px; font-size: 12px; }
+.chip::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--g, var(--muted)); }
+.chip small { color: var(--muted); font-variant-numeric: tabular-nums; }
+.chip[aria-pressed="true"] { background: color-mix(in srgb, var(--g, var(--primary)) 22%, var(--panel)); border-color: var(--g, var(--primary)); font-weight: 600; }
+.tag.genre { background: color-mix(in srgb, var(--g, var(--muted)) 22%, var(--panel)); }
+.tag.genre::before { content: ""; display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--g); margin-right: 4px; vertical-align: 1px; }
+.cal-line .dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--g, var(--muted)); margin-right: 2px; vertical-align: 1px; }
+.cal-nav .wk { display: flex; gap: 4px; align-items: center; font-size: 12px; color: var(--muted); }
+.cal-empty { padding: 10px 12px; color: var(--muted); font-size: 13px; }
+.preview { font-size: 13px; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; }
+.preview.warn { border-color: var(--danger); }
+.hist { list-style: none; margin: 0 0 10px; padding: 0; display: grid; gap: 6px; max-height: 50vh; overflow-y: auto; }
+.hist li { display: flex; gap: 10px; justify-content: space-between; align-items: center; border: 1px solid var(--line); border-radius: 6px; padding: 6px 10px; }
+.genre-row { display: grid; grid-template-columns: 40px 1fr auto; gap: 8px; align-items: center; margin-bottom: 6px; }
+.genre-row input[type=color] { width: 40px; height: 30px; padding: 0; }
+dialog select { display: block; width: 100%; margin-top: 3px; font-size: 14px; }
