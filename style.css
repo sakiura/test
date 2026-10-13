@@ -312,3 +312,10 @@ dialog select { display: block; width: 100%; margin-top: 3px; font-size: 14px; }
 .master-row input { margin-top: 0; }
 .unlisted { margin: 10px 0 0; font-size: 12px; color: var(--muted); display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .ro #btnDepts, .ro #btnPeople, .ro .inline-actions button { display: none !important; }
+
+/* コマの行の担当部署・担当者 */
+.blk-who { display: flex; flex-wrap: wrap; gap: 6px; margin: 2px 0; }
+.blk-who select { font-size: 12px; padding: 1px 4px; max-width: 150px; min-width: 0; }
+
+/* 共有データの読み込みが終わるまで操作を止める */
+.syncing .topbar, .syncing .toolbar, .syncing .viewbar, .syncing .layout { pointer-events: none; opacity: .55; }

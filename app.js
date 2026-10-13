@@ -26,9 +26,10 @@
   ];
   // プルダウンの一覧(後から追加・名前変更・並べ替えができる)
   const MASTERS = {
-    depts: { field: 'dept', title: '担当部署',
+    depts: { field: 'dept', title: '担当部署', version: 1,
       defaults: ['イネーブル', '総務/経理', '人事', 'コンプラ部', '社長', '商品部', '総務/事務', '営業事務', 'FC部', '経理'] },
-    people: { field: 'person', title: '担当者', defaults: ['崎浦'] },
+    people: { field: 'person', title: '担当者', version: 2,
+      defaults: ['崎浦', '原澤', '田村', '白川', '三輪', '山嵜', '中山', '古田', '古田/中山', '古田/山嵜', '柚木', '千代田'] },
   };
   // 取り込み時、ジャンル列が無いコマはタイトル・目的から推測する(あとで直せる)
   const GENRE_RULES = [
@@ -109,6 +110,7 @@
   const fmtMin = (m) => `${pad(Math.floor(m / 60))}:${pad(m % 60)}`;
   const ymOf = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}`;
   const monthLabel = (ym) => { const [y, m] = ym.split('-'); return `${y}年${Number(m)}月`; };
+  const mergeDefaults = (list, defs) => [...list, ...defs.filter((d) => !list.includes(d))];
   const nextYm = (ym) => { const [y, m] = ym.split('-').map(Number); return ymOf(new Date(y, m, 1)); };
   const jpDate = (s) => { const d = parseDate(s); return `${d.getMonth() + 1}/${d.getDate()}(${DOW[d.getDay()]})`; };
   const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
@@ -171,7 +173,8 @@
       sc.month = sc.month || (sc.days && sc.days[0] ? sc.days[0].date.slice(0, 7) : ymOf(new Date()));
       if (!st.ver || st.ver < 3) sc.skipHolidays = false; // 祝日も研修を行う
     });
-    st.ver = 3;
+    if ((st.ver || 0) < 4) st.people = mergeDefaults(st.people, MASTERS.people.defaults);
+    st.ver = 4;
     return st;
   }
   let store = loadStore();
@@ -490,9 +493,19 @@
     }).join('');
   }
 
+  // コマの行で担当部署・担当者を直接選ぶプルダウン
+  function masterOptsHtml(kind, value, label) {
+    const names = store[kind].slice();
+    if (value && !names.includes(value)) names.push(value);
+    return `<option value="">${label}</option>` + names.map((n) => `<option${n === value ? ' selected' : ''}>${esc(n)}</option>`).join('');
+  }
+  const whoHtml = (b) => `<div class="blk-who">
+    <select data-bf="dept" aria-label="担当部署">${masterOptsHtml('depts', b.dept, '担当部署')}</select>
+    <select data-bf="person" aria-label="担当者">${masterOptsHtml('people', b.person, '担当者')}</select></div>`;
+
   function blockHtml(d, b, bs, be, idx) {
     const v = effVenue(d, b);
-    const meta = [b.dept, b.person, b.purpose, v && v !== d.venue ? `📍${v}` : ''].filter(Boolean).join(' / ');
+    const meta = [b.purpose, v && v !== d.venue ? `📍${v}` : ''].filter(Boolean).join(' / ');
     return `<div class="blk${b.done ? ' done' : ''}${matchGenre(b) ? '' : ' dim'}" data-block="${b.id}"${b.genre ? ` style="--g:${genreColor(b.genre)}"` : ''}>
       <span class="grip" title="ドラッグで移動">⋮⋮</span>
       <input type="checkbox" data-bf="done" ${b.done ? 'checked' : ''} aria-label="完了">
@@ -501,6 +514,7 @@
       </div>
       <div>
         <div class="blk-title">${esc(b.title)}${b.genre ? `<span class="tag genre">${esc(b.genre)}</span>` : ''}${b.test ? `<span class="tag test">${esc(b.test)}</span>` : ''}</div>
+        ${whoHtml(b)}
         ${meta ? `<div class="meta">${esc(meta)}</div>` : ''}
         ${linksHtml(b)}
       </div>
@@ -520,7 +534,7 @@
     return `<div class="blk${matchGenre(b) ? '' : ' dim'}" data-block="${b.id}"${b.genre ? ` style="--g:${genreColor(b.genre)}"` : ''}>
       <span class="grip" title="ドラッグで移動">⋮⋮</span>
       <div><div class="blk-title">${esc(b.title)}${b.genre ? `<span class="tag genre">${esc(b.genre)}</span>` : ''}${b.test ? `<span class="tag test">${esc(b.test)}</span>` : ''}</div>
-        <div class="meta">${esc([b.dept, b.person].filter(Boolean).join(' / '))}</div>${linksHtml(b)}</div>
+        ${whoHtml(b)}${linksHtml(b)}</div>
       <label class="mins"><input type="number" data-bf="minutes" min="5" step="5" value="${Number(b.minutes) || 0}">分</label>
       <div class="b-sub">
         <select data-act="to-day" aria-label="日へ入れる"><option value="">日へ入れる…</option>
@@ -935,6 +949,7 @@
       if (!f) return;
       const b = f.list[f.i];
       if (t.dataset.bf === 'done') b.done = t.checked;
+      else if (t.dataset.bf === 'dept' || t.dataset.bf === 'person') b[t.dataset.bf] = t.value;
       else b[t.dataset.bf] = Math.max(t.dataset.bf === 'minutes' ? 5 : 0, parseInt(t.value, 10) || 0);
       commit();
     }
@@ -1330,8 +1345,8 @@
       if (sc.backlog.length || shadow.has(`backlogs/${sc.id}`)) want.set(`backlogs/${sc.id}`, canon.backlogs({ blocks: sc.backlog }));
     });
     want.set('meta/genres', { list: store.genres });
-    want.set('meta/depts', { list: store.depts });
-    want.set('meta/people', { list: store.people });
+    want.set('meta/depts', { list: store.depts, v: MASTERS.depts.version });
+    want.set('meta/people', { list: store.people, v: MASTERS.people.version });
     const ops = [];
     for (const [path, data] of want) { const j = stable(data); if (shadow.get(path) !== j) ops.push({ path, j }); }
     for (const path of [...shadow.keys()]) if (!want.has(path)) ops.push({ path, j: null });
@@ -1381,7 +1396,7 @@
   const onMaster = (kind) => (snapshot) => {
     const prev = remote[kind] ? stable(remote[kind].data) : null;
     const { by, at, ...rest } = snapshot.exists ? clone(snapshot.data()) : {};
-    remote[kind] = snapshot.exists && Array.isArray(rest.list) ? { data: { list: rest.list } } : null;
+    remote[kind] = snapshot.exists && Array.isArray(rest.list) ? { data: { list: rest.list, v: rest.v || 1 } } : null;
     loaded[kind] = true;
     if ((remote[kind] ? stable(remote[kind].data) : null) !== prev || !initialApplied) applyRemote();
   };
@@ -1410,7 +1425,12 @@
       sc.backlog = bl ? bl.data.blocks : [];
     });
     if (remote.genres) store.genres = remote.genres.data.list;
-    ['depts', 'people'].forEach((k) => { if (remote[k]) store[k] = remote[k].data.list; });
+    let migrated = false;
+    ['depts', 'people'].forEach((k) => {
+      if (!remote[k]) return;
+      store[k] = remote[k].data.list;
+      if (remote[k].data.v < MASTERS[k].version) { store[k] = mergeDefaults(store[k], MASTERS[k].defaults); migrated = true; } // 既定の一覧が増えた版: 足りない分を足して書き戻す
+    });
     if (!scheds.length) { placeholder = placeholder || newSchedule(DEFAULT_NAME); scheds.push(placeholder); }
     store.schedules = scheds;
     let saved = prevCur;
@@ -1425,8 +1445,11 @@
     ['depts', 'people'].forEach((k) => { if (remote[k]) shadow.set(`meta/${k}`, stable(remote[k].data)); });
     store.schedules.forEach((sc) => lastJson.set(sc.id, contentJson(sc)));
     initialApplied = true;
+    document.body.classList.remove('syncing');
+    $('loading').hidden = true;
     setSync('');
     render();
+    if (migrated) save();
   }
 
   // 変更履歴(共有): 文書 history/{auto}
@@ -1507,7 +1530,8 @@
     store.currentId = placeholder.id;
     store.genres = DEFAULT_GENRES.map((g) => ({ ...g }));
     Object.entries(MASTERS).forEach(([k, m]) => { store[k] = m.defaults.slice(); });
-    const fail = (e) => { setSync('error', e); if (e && e.code === 'revoked') { readOnly = true; render(); } };
+    document.body.classList.add('syncing');
+    const fail = (e) => { document.body.classList.remove('syncing'); $('loading').hidden = true; setSync('error', e); if (e && e.code === 'revoked') { readOnly = true; render(); } };
     db.collection('schedules').onSnapshot((x) => onDocs('schedules', x), fail);
     db.collection('days').onSnapshot((x) => onDocs('days', x), fail);
     db.collection('backlogs').onSnapshot((x) => onDocs('backlogs', x), fail);
@@ -1522,8 +1546,9 @@
     $('loading').hidden = false;
     let db = null, user = null;
     try { [db, user] = await Promise.all([window.claude.use('db'), window.claude.use('user')]); } catch (e) { db = null; }
+    if (db) return startShared(db, user);
     $('loading').hidden = true;
-    return db ? startShared(db, user) : startLocal();
+    return startLocal();
   }
 
   // ---------- スケジュール管理 ----------
