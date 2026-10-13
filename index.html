@@ -7,6 +7,7 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
+  <p id="loading" class="loading" hidden>共有データを読み込んでいます…</p>
   <header class="topbar">
     <div class="top-left">
       <button id="schedPrev" class="ghost" type="button" aria-label="前の月のスケジュール">&lt;</button>
@@ -72,6 +73,11 @@
       <span id="calStat" class="summary"></span>
     </div>
   </div>
+  <div id="shareBar" class="share-bar" hidden>
+    <span id="modeTag" class="mode-tag"></span>
+    <span id="syncTag" class="sync-tag" role="status"></span>
+    <button id="btnMigrate" class="small" type="button" hidden>このブラウザの保存データを共有に移す</button>
+  </div>
   <div id="genreBar" class="genre-bar" aria-label="ジャンル"></div>
   <div id="banner" class="banner" hidden></div>
 
@@ -104,8 +110,11 @@
       </div>
       <label>目的<input id="ePurpose"></label>
       <label>詳細<textarea id="eDetail" rows="3"></textarea></label>
+      <label>資料のURL<span class="sub">(1行に1件。「名前 URL」またはURLのみ。Googleスライド・ドライブ・動画など)</span>
+        <textarea id="eLinks" rows="3" placeholder="オリエン資料 https://docs.google.com/presentation/d/...&#10;https://drive.google.com/..."></textarea></label>
+      <p id="eLinksErr" class="error" hidden></p>
       <div class="grid2">
-        <label>資料<input id="eMaterials"></label>
+        <label>資料メモ(ファイル名など)<input id="eMaterials"></label>
         <label>テスト<input id="eTest" placeholder="例: 筆記テスト"></label>
       </div>
       <div class="grid2">
@@ -174,6 +183,23 @@
       </div>
     </form>
   </dialog>
+
+  <dialog id="confirmDlg">
+    <p id="confirmMsg" class="confirm-msg"></p>
+    <div class="dlg-actions">
+      <button type="button" id="confirmOk" class="primary">OK</button>
+      <button type="button" id="confirmCancel" class="ghost">キャンセル</button>
+    </div>
+  </dialog>
+
+  <dialog id="copyDlg">
+    <h3>コピーできませんでした</h3>
+    <p class="hint">下の内容を選択してコピーし、スプレッドシートに貼り付けてください。</p>
+    <textarea id="copyText" rows="8" readonly></textarea>
+    <div class="dlg-actions"><button type="button" id="copyClose" class="ghost">閉じる</button></div>
+  </dialog>
+
+  <div id="toast" class="toast" role="status" hidden></div>
 
   <script src="app.js"></script>
 </body>

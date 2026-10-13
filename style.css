@@ -218,3 +218,26 @@ dialog label.inline { display: flex; gap: 6px; align-items: center; }
 .genre-row { display: grid; grid-template-columns: 40px 1fr auto; gap: 8px; align-items: center; margin-bottom: 6px; }
 .genre-row input[type=color] { width: 40px; height: 30px; padding: 0; }
 dialog select { display: block; width: 100%; margin-top: 3px; font-size: 14px; }
+
+/* 共有・資料URL・確認 */
+.loading { margin: 0; padding: 10px 16px; color: var(--muted); background: var(--panel); border-bottom: 1px solid var(--line); }
+.share-bar { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; padding: 8px 16px 0; font-size: 12px; }
+.mode-tag { border: 1px solid var(--primary); color: var(--primary); border-radius: 99px; padding: 0 10px; }
+.mode-tag.ro { border-color: var(--muted); color: var(--muted); }
+.sync-tag { color: var(--muted); }
+.sync-tag.err { color: var(--danger); font-weight: 600; }
+.sub { display: block; font-size: 11px; color: var(--muted); }
+.blk-links { display: flex; flex-wrap: wrap; gap: 4px 10px; margin-top: 2px; font-size: 12px; }
+.blk-links a { color: var(--primary); text-decoration: none; border-bottom: 1px solid color-mix(in srgb, var(--primary) 40%, transparent); overflow-wrap: anywhere; }
+.blk-links a:hover { border-bottom-color: var(--primary); }
+.blk-links .lbl { color: var(--muted); }
+.by { font-size: 11px; color: var(--muted); }
+.confirm-msg { margin: 0 0 12px; font-size: 14px; white-space: pre-wrap; }
+.toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  background: var(--text); color: var(--bg); padding: 8px 14px; border-radius: 8px; z-index: 50; max-width: calc(100% - 32px); }
+#copyText { display: block; width: 100%; }
+
+/* 閲覧のみ */
+.ro .blk-actions, .ro .day-actions, .ro .day-foot, .ro .grip, .ro #btnAddDay, .ro #btnAddBacklog, .ro .bulk, .ro #btnNewMonth,
+.ro #btnImport, .ro #btnDelSched, .ro #schedMonth, .ro #btnGenres, .ro [data-hist], .ro .cal-add, .ro #btnMigrate { display: none !important; }
+.ro .backlog select { display: none; }

@@ -61,6 +61,28 @@
 `;
 
   const $ = (id) => document.getElementById(id);
+  let toastTimer = null;
+  function notify(msg) {
+    const t = $('toast');
+    t.textContent = msg;
+    t.hidden = false;
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => { t.hidden = true; }, 3500);
+  }
+  // 公開ページでは confirm() が使えないため、画面内のダイアログで確認する
+  function askConfirm(message, okLabel = 'OK') {
+    return new Promise((resolve) => {
+      const dlg = $('confirmDlg');
+      $('confirmMsg').textContent = message;
+      $('confirmOk').textContent = okLabel;
+      const done = (v) => { dlg.removeEventListener('cancel', onCancel); dlg.close(); resolve(v); };
+      const onCancel = () => { dlg.removeEventListener('cancel', onCancel); resolve(false); };
+      $('confirmOk').onclick = () => done(true);
+      $('confirmCancel').onclick = () => done(false);
+      dlg.addEventListener('cancel', onCancel);
+      dlg.showModal();
+    });
+  }
   let view = 'list';      // list | month | year
   let calMonth = null;    // 表示中の月(その月の1日)
   let calFor = null;      // calMonth がどのスケジュール用か
@@ -95,12 +117,30 @@
 
   const restLabel = (dateStr) => { const w = parseDate(dateStr).getDay(); return w === 0 ? '日曜' : w === 6 ? '土曜' : ''; };
 
+  // ---------- 資料URL ----------
+  const URL_LINE = /^(.*?)\s*(https?:\/\/\S+)\s*$/;
+  const cleanTitle = (t) => t.replace(/[|｜:：\-–—]+$/, '').trim();
+  const hostOf = (u) => { try { return new URL(u).hostname; } catch (e) { return u; } };
+  function parseLinks(text) {
+    const links = [], bad = [];
+    text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean).forEach((line) => {
+      const m = URL_LINE.exec(line);
+      if (!m) { bad.push(line); return; }
+      try { links.push({ title: cleanTitle(m[1]), url: new URL(m[2]).href }); } catch (e) { bad.push(line); }
+    });
+    return { links, bad };
+  }
+  const linkLines = (links) => (links || []).map((l) => (l.title ? `${l.title} ${l.url}` : l.url));
+  const linksHtml = (b) => (b.links && b.links.length
+    ? `<div class="blk-links"><span class="lbl">資料</span>${b.links.map((l) =>
+      `<a href="${esc(l.url)}" target="_blank" rel="noopener noreferrer">${esc(l.title || hostOf(l.url))}</a>`).join('')}</div>` : '');
+
   // ---------- データ ----------
   function newSchedule(name) {
     return { id: uid(), name, month: ymOf(new Date()), days: [], backlog: [], skipHolidays: false, defaultStart: '10:00', defaultGap: 15, endLimit: '18:00', history: [] };
   }
   function newBlock(o = {}) {
-    return { id: uid(), title: '', minutes: 60, gap: 0, genre: '', dept: '', person: '', purpose: '', detail: '', materials: '',
+    return { id: uid(), title: '', minutes: 60, gap: 0, genre: '', dept: '', person: '', purpose: '', detail: '', materials: '', links: [],
       test: '', result: '', done: false, venue: '', memo: '', ...o };
   }
   function loadStore() {
@@ -127,7 +167,17 @@
   const matchGenre = (b) => !genreFilter || (genreFilter === '__none' ? !b.genre : b.genre === genreFilter);
 
   // 保存と変更履歴(変更前の状態を、編集10分ごと・大きな操作の前に残す)
+  const CUR_KEY = 'training-schedule-current';
+  const DEFAULT_NAME = '新しい研修スケジュール';
+  let mode = 'local';   // local = このブラウザに保存 / shared = 共有データベース
+  let readOnly = false;
+  let flushTimer = null;
   function save() {
+    if (mode === 'shared') {
+      try { localStorage.setItem(CUR_KEY, store.currentId); } catch (e) { /* なくても動く */ }
+      if (!readOnly) { clearTimeout(flushTimer); flushTimer = setTimeout(flush, 250); }
+      return;
+    }
     for (let attempt = 0; attempt < 3; attempt++) {
       try { localStorage.setItem(STORAGE_KEY, JSON.stringify(store)); return; } catch (e) {
         // 容量超過のときは古い履歴から減らす
@@ -140,10 +190,12 @@
   }
   const contentOf = (sc) => ({ name: sc.name, month: sc.month, days: sc.days, backlog: sc.backlog,
     skipHolidays: sc.skipHolidays, defaultStart: sc.defaultStart, defaultGap: sc.defaultGap, endLimit: sc.endLimit });
-  const contentJson = (sc) => JSON.stringify(contentOf(sc));
+  const contentJson = (sc) => JSON.stringify(contentOf(sc), (k, v) => (k && k[0] === '_' ? undefined : v));
   const lastJson = new Map();
   store.schedules.forEach((sc) => lastJson.set(sc.id, contentJson(sc)));
+  const lastSnapT = new Map(), lastSnapJson = new Map();
   function pushSnap(sc, reason, json) {
+    if (mode === 'shared') { sharedSnap(sc, reason, json); return; }
     const h = sc.history;
     if (h.length && h[h.length - 1].json === json) return;
     h.push({ t: Date.now(), reason, json });
@@ -153,7 +205,7 @@
   function recordHistory(sc) {
     const json = contentJson(sc), prev = lastJson.get(sc.id);
     if (prev !== undefined && prev !== json) {
-      const last = sc.history.length ? sc.history[sc.history.length - 1].t : 0;
+      const last = mode === 'shared' ? (lastSnapT.get(sc.id) || 0) : (sc.history.length ? sc.history[sc.history.length - 1].t : 0);
       if (Date.now() - last > 10 * 60 * 1000) pushSnap(sc, '編集前', prev);
     }
     lastJson.set(sc.id, json);
@@ -190,6 +242,14 @@
     $('mainLayout').classList.toggle('no-side', view === 'year');
     document.querySelectorAll('.tabs button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.view === view)));
     if (view !== 'list') renderCal(s);
+    document.body.classList.toggle('ro', readOnly);
+    if (readOnly) {
+      document.querySelectorAll('#daysView input, #daysView select, #daysView textarea, #backlogList input, #backlogList select')
+        .forEach((el) => { el.disabled = true; });
+    }
+    $('schedName').disabled = readOnly;
+    renderShareBar();
+    if (mode === 'shared') fillNames();
   }
 
   function fillSchedSelect(s) {
@@ -264,6 +324,7 @@
         <input class="section" data-f="section" value="${esc(d.section)}" placeholder="区分(例: 営業研修)" aria-label="区分">
         <label>会場<input class="venue" data-f="venue" value="${esc(d.venue)}" placeholder="例: 本社 会議室A"></label>
         <label>開始<input type="time" data-f="start" value="${esc(d.start)}"></label>
+        <span class="by" data-by="${esc(d._by || '')}" data-at="${d._at || ''}"></span>
         <span class="day-sum${over ? ' over' : ''}">${esc(sum)}</span>
         <div class="day-actions">
           <details class="menu"><summary aria-label="この日の操作">⋯</summary>
@@ -298,6 +359,7 @@
       <div>
         <div class="blk-title">${esc(b.title)}${b.genre ? `<span class="tag genre">${esc(b.genre)}</span>` : ''}${b.test ? `<span class="tag test">${esc(b.test)}</span>` : ''}</div>
         ${meta ? `<div class="meta">${esc(meta)}</div>` : ''}
+        ${linksHtml(b)}
       </div>
       <label class="mins"><input type="number" data-bf="minutes" min="5" step="5" value="${Number(b.minutes) || 0}">分</label>
       <div class="blk-actions">
@@ -315,7 +377,7 @@
     return `<div class="blk${matchGenre(b) ? '' : ' dim'}" data-block="${b.id}"${b.genre ? ` style="--g:${genreColor(b.genre)}"` : ''}>
       <span class="grip" title="ドラッグで移動">⋮⋮</span>
       <div><div class="blk-title">${esc(b.title)}${b.genre ? `<span class="tag genre">${esc(b.genre)}</span>` : ''}${b.test ? `<span class="tag test">${esc(b.test)}</span>` : ''}</div>
-        <div class="meta">${esc([b.dept, b.person].filter(Boolean).join(' / '))}</div></div>
+        <div class="meta">${esc([b.dept, b.person].filter(Boolean).join(' / '))}</div>${linksHtml(b)}</div>
       <label class="mins"><input type="number" data-bf="minutes" min="5" step="5" value="${Number(b.minutes) || 0}">分</label>
       <div class="b-sub">
         <select data-act="to-day" aria-label="日へ入れる"><option value="">日へ入れる…</option>
@@ -380,7 +442,7 @@
         const lines = [];
         days.forEach((day) => layout(day).forEach(({ b, s: bs }) => lines.push({ b, bs })));
         const MAX = 5;
-        row += `<div class="${cls}" data-caldate="${key}"${days.length ? ` data-calday="${days[0].id}" draggable="true" title="クリックで詳細 / ドラッグで日付を移動"` : ''}>
+        row += `<div class="${cls}" data-caldate="${key}"${days.length ? ` data-calday="${days[0].id}"${readOnly ? '' : ' draggable="true"'} title="クリックで詳細 / ドラッグで日付を移動"` : ''}>
           <div class="cal-top"><span class="cal-num dow-${hol ? 0 : wd}">${d.getDate()}</span>${hol ? `<span class="cal-hol">${esc(hol)}</span>` : ''}
             ${days.length ? '' : `<button type="button" class="cal-add" data-act="cal-add" data-date="${key}" aria-label="${d.getMonth() + 1}月${d.getDate()}日に研修日を追加">＋</button>`}</div>
           ${days.map((day) => `${day.section ? `<div class="cal-sec">${esc(day.section)}</div>` : ''}${day.venue ? `<div class="cal-venue">${esc(day.venue)}</div>` : ''}`).join('')}
@@ -499,18 +561,28 @@
 
   // ---------- 変更履歴 ----------
   const fmtTime = (t) => { const d = new Date(t); return `${d.getFullYear()}/${pad(d.getMonth() + 1)}/${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`; };
-  function openHistory() {
-    const h = cur().history;
-    $('histList').innerHTML = h.length ? h.map((x, i) => {
+  let histItems = [];
+  async function loadHistory() {
+    const sc = cur();
+    if (mode !== 'shared') return [...sc.history].reverse();
+    const q = await dbx.collection('history').where('sid', '==', sc.id).orderBy('t', 'desc').limit(30).get();
+    return q.docs.map((d) => JSON.parse(JSON.stringify(d.data())));
+  }
+  async function openHistory() {
+    try { histItems = await loadHistory(); } catch (e) { return notify('履歴を読み込めませんでした。'); }
+    const ids = [...new Set(histItems.map((x) => x.by).filter(Boolean))];
+    const ps = userx && ids.length ? await userx.profiles(ids) : {};
+    $('histList').innerHTML = histItems.length ? histItems.map((x, i) => {
       let c; try { c = JSON.parse(x.json); } catch (e) { return ''; }
-      return `<li><div><b>${fmtTime(x.t)}</b> ${esc(x.reason)}<div class="meta">${c.days.length}日 / ${c.days.reduce((n, d) => n + d.blocks.length, 0)}コマ / 未配置${c.backlog.length}</div></div>
+      const who = x.by ? ` / ${esc((ps[x.by] && ps[x.by].name) || 'メンバー')}` : '';
+      return `<li><div><b>${fmtTime(x.t)}</b> ${esc(x.reason)}${who}<div class="meta">${c.days.length}日 / ${c.days.reduce((n, d) => n + d.blocks.length, 0)}コマ / 未配置${c.backlog.length}</div></div>
         <button type="button" class="small" data-hist="${i}">この状態に戻す</button></li>`;
-    }).reverse().join('') : '<li class="hint">まだ履歴がありません。編集すると、変更前の状態が自動で残ります。</li>';
+    }).join('') : '<li class="hint">まだ履歴がありません。編集すると、変更前の状態が自動で残ります。</li>';
     $('histDlg').showModal();
   }
-  function restoreSnap(i) {
-    const sc = cur(), x = sc.history[i];
-    if (!x || !confirm('この時点の状態に戻しますか?(戻す前の状態も履歴に残ります)')) return;
+  async function restoreSnap(i) {
+    const sc = cur(), x = histItems[i];
+    if (!x || !(await askConfirm('この時点の状態に戻しますか?(戻す前の状態も履歴に残ります)', '戻す'))) return;
     pushSnap(sc, '復元前', contentJson(sc));
     Object.assign(sc, JSON.parse(x.json));
     lastJson.set(sc.id, contentJson(sc));
@@ -564,7 +636,7 @@
     if (found.list === dest && found.i < idx) idx--;
     dest.splice(Math.max(0, Math.min(idx, dest.length)), 0, blk);
   }
-  function commit() { recordHistory(cur()); save(); render(); }
+  function commit() { if (readOnly) { render(); return; } recordHistory(cur()); save(); render(); }
 
   function addDay(s) {
     const last = s.days[s.days.length - 1];
@@ -582,7 +654,7 @@
   const stripId = (b) => { const { id, ...rest } = b; return rest; };
   const cloneBlock = (b) => ({ ...b, id: uid(), done: false });
 
-  function onClick(e) {
+  async function onClick(e) {
     const btn = e.target.closest('[data-act]');
     if (!btn || btn.tagName === 'SELECT') return;
     const s = cur();
@@ -604,7 +676,7 @@
         s.days.splice(i + 1, 0, { ...day, id: uid(), date: fmtDate(addBiz(parseDate(day.date), 1, s.skipHolidays)), blocks: day.blocks.map(cloneBlock) });
       }
       if (act === 'day-del') {
-        if (!confirm(`${jpDate(day.date)} を削除しますか?(コマ${day.blocks.length}件も消えます)`)) return;
+        if (!(await askConfirm(`${jpDate(day.date)} を削除しますか?(コマ${day.blocks.length}件も消えます。変更履歴から戻せます)`, '削除する'))) return;
         s.days.splice(i, 1);
       }
       return commit();
@@ -619,7 +691,7 @@
     if (act === 'blk-dup') f.list.splice(f.i + 1, 0, cloneBlock(f.list[f.i]));
     if (act === 'blk-unplace' && f.day) moveBlock(id, 'backlog', s.backlog.length);
     if (act === 'blk-del') {
-      if (!confirm(`「${f.list[f.i].title}」を削除しますか?`)) return;
+      if (!(await askConfirm(`「${f.list[f.i].title}」を削除しますか?(変更履歴から戻せます)`, '削除する'))) return;
       snap('コマ削除前');
       f.list.splice(f.i, 1);
     }
@@ -760,6 +832,8 @@
     $('blockDlgTitle').textContent = isNew ? 'コマを追加' : 'コマを編集';
     for (const [id, key] of Object.entries(FIELDS)) $(id).value = b[key] ?? '';
     $('eDone').checked = !!b.done;
+    $('eLinks').value = linkLines(b.links).join('\n');
+    $('eLinksErr').hidden = true;
     $('blockDlg').showModal();
     $('eTitle').focus();
   }
@@ -770,6 +844,13 @@
     data.minutes = Math.max(5, parseInt(data.minutes, 10) || 60);
     data.gap = Math.max(0, parseInt(data.gap, 10) || 0);
     data.done = $('eDone').checked;
+    const parsed = parseLinks($('eLinks').value);
+    if (parsed.bad.length) {
+      $('eLinksErr').textContent = `URLとして読み取れない行があります(http:// または https:// で始まるURLを入れてください): ${parsed.bad[0]}`;
+      $('eLinksErr').hidden = false;
+      return;
+    }
+    data.links = parsed.links;
     if (editing.id) {
       const f = findBlock(editing.id);
       if (f) Object.assign(f.list[f.i], data);
@@ -820,6 +901,16 @@
     }
     const g = (r, k) => (r[H[k]] || '').trim();
     const dash = (v) => (v === '-' || v === '－' ? '' : v);
+    // 資料セル: URLを含む行は資料URL、それ以外は資料メモにする
+    const parseMaterials = (cells) => {
+      const texts = [], links = [];
+      cells.map(dash).filter(Boolean).forEach((cell) => cell.split(/\n| \/ /).map((x) => x.trim()).filter(Boolean).forEach((seg) => {
+        const m = URL_LINE.exec(seg);
+        if (m) { try { links.push({ title: cleanTitle(m[1]), url: new URL(m[2]).href }); return; } catch (e) { /* 文字として扱う */ } }
+        texts.push(seg);
+      }));
+      return { materials: texts.join(' / '), links };
+    };
     const TIME = /(\d{1,2}):(\d{2})\s*[-–—~〜ー－]\s*(\d{1,2}):(\d{2})/;
     const DATE = /^(?:(\d{4})[/.-])?(\d{1,2})[/.-](\d{1,2})$/;
     const days = [], backlog = [];
@@ -842,7 +933,7 @@
         const b = newBlock({
           title: title || g(r, '目的') || '(無題)', minutes: Math.max(5, e - s), dept: g(r, '担当'), person: g(r, '担当者'),
           test: dash(g(r, 'test')), purpose: g(r, '目的'), detail: g(r, '詳細'),
-          materials: [dash(g(r, '資料1')), dash(g(r, '資料2'))].filter(Boolean).join(' / '),
+          ...parseMaterials([g(r, '資料1'), g(r, '資料2')]),
           result: dash(g(r, 'result')), done: g(r, '進捗') === '完了', memo: g(r, 'memo'),
           genre: g(r, 'genre') || guessGenre(title || g(r, '目的'), g(r, '目的')),
           venue: !dm && g(r, '会場') && day && g(r, '会場') !== day.venue ? g(r, '会場') : '',
@@ -854,7 +945,7 @@
         const mins = parseInt(g(r, '分'), 10);
         const dept = g(r, '担当');
         backlog.push(newBlock({ title: title || dept || '(無題)', dept: title ? dept : '', person: g(r, '担当者'), minutes: mins, test: dash(g(r, 'test')),
-          purpose: g(r, '目的'), detail: g(r, '詳細'), memo: g(r, 'memo'),
+          purpose: g(r, '目的'), detail: g(r, '詳細'), memo: g(r, 'memo'), ...parseMaterials([g(r, '資料1'), g(r, '資料2')]),
           genre: g(r, 'genre') || guessGenre(title || dept, g(r, '目的')) }));
       }
     });
@@ -869,6 +960,7 @@
     return { days, backlog };
   }
 
+  const matCell = (b) => [b.materials, ...linkLines(b.links)].filter(Boolean).join('\n');
   function buildRows(s) {
     const rows = [['', '日程', '会場', '時間', '分', '担当', '担当者', '研修内容', 'テスト', '目的', '詳細', '資料1', '資料2', 'テスト', '進捗', 'memo', 'ジャンル']];
     const md = (d) => { const x = parseDate(d); return `${x.getMonth() + 1}/${x.getDate()}`; };
@@ -880,11 +972,11 @@
       tl.forEach(({ b, s: bs, e: be }, i) => {
         const v = effVenue(d, b);
         rows.push(['', i === 0 ? md(d.date) : i === 1 ? wd : '', i === 0 ? d.venue : (v !== d.venue ? v : ''),
-          `${fmtMin(bs)}-${fmtMin(be)}`, b.minutes, b.dept, b.person, b.title, b.test, b.purpose, b.detail, b.materials, '', b.result, b.done ? '完了' : '', b.memo, b.genre]);
+          `${fmtMin(bs)}-${fmtMin(be)}`, b.minutes, b.dept, b.person, b.title, b.test, b.purpose, b.detail, matCell(b), '', b.result, b.done ? '完了' : '', b.memo, b.genre]);
       });
       if (tl.length === 1) rows.push(['', wd]);
     });
-    s.backlog.forEach((b) => rows.push(['', '', '', '', b.minutes, b.dept, b.person, b.title, b.test, b.purpose, b.detail, b.materials, '', b.result, '', b.memo, b.genre]));
+    s.backlog.forEach((b) => rows.push(['', '', '', '', b.minutes, b.dept, b.person, b.title, b.test, b.purpose, b.detail, matCell(b), '', b.result, '', b.memo, b.genre]));
     return rows;
   }
   const toDelimited = (rows, delim) => rows.map((r) => r.map((v) => {
@@ -911,9 +1003,10 @@
     cur().days.forEach((d) => layout(d).forEach(({ b, s, e }) => {
       out.push('BEGIN:VEVENT', `UID:${b.id}@training-schedule`, `DTSTAMP:${now}`, `DTSTART:${dt(d.date, s)}`, `DTEND:${dt(d.date, e)}`, `SUMMARY:${e2(b.title)}`);
       if (effVenue(d, b)) out.push(`LOCATION:${e2(effVenue(d, b))}`);
-      const desc = [b.dept && b.person ? `${b.dept} ${b.person}` : b.dept || b.person, b.purpose, b.detail].filter(Boolean).join('\n');
+      const desc = [b.dept && b.person ? `${b.dept} ${b.person}` : b.dept || b.person, b.purpose, b.detail, ...(b.links || []).map((l) => `${l.title || '資料'}: ${l.url}`)].filter(Boolean).join('\n');
       if (desc) out.push(`DESCRIPTION:${e2(desc)}`);
       if (b.genre) out.push(`CATEGORIES:${e2(b.genre)}`);
+      if (b.links && b.links[0]) out.push(`URL:${b.links[0].url}`);
       out.push('END:VEVENT');
     }));
     out.push('END:VCALENDAR');
@@ -945,7 +1038,7 @@
 
   function doImport() {
     const text = $('importText').value;
-    if (!text.trim()) return alert('貼り付けるか、ファイルを選んでください。');
+    if (!text.trim()) return notify('貼り付けるか、ファイルを選んでください。');
     const year = parseInt($('importYear').value, 10) || new Date().getFullYear();
     if (text.trim().startsWith('{')) {
       try {
@@ -957,12 +1050,228 @@
         placeImported(sc);
         $('importDlg').close();
         return commit();
-      } catch (err) { return alert('読み込みに失敗しました: ' + err.message); }
+      } catch (err) { return notify('読み込みに失敗しました: ' + err.message); }
     }
     const parsed = parseSheetRows(parseDelimited(text, detectDelim(text)), year);
-    if (!parsed.days.length && !parsed.backlog.length) return alert('日程を読み取れませんでした。見出し行(日程・会場・時間…)を含めてコピーしてください。');
+    if (!parsed.days.length && !parsed.backlog.length) return notify('日程を読み取れませんでした。見出し行(日程・会場・時間…)を含めてコピーしてください。');
     $('importDlg').close();
     addImported(parsed);
+  }
+
+
+  // ---------- 共有(claude.ai の共有データベース) ----------
+  // 文書: schedules/{id}(月ごとの設定) / days/{id}(1日分のコマ) / backlogs/{scheduleId}(未配置) /
+  //       meta/genres(ジャンル) / history/{auto}(変更前の状態)。日ごとに分けて、別の日の編集がぶつからないようにする。
+  let dbx = null, userx = null, myId = null, placeholder = null;
+  let flushing = false, flushAgain = false, needRebuild = false, initialApplied = false;
+  const shadow = new Map();   // 文書パス -> こちらが把握しているサーバー側の内容
+  const remote = { schedules: new Map(), days: new Map(), backlogs: new Map(), genres: null };
+  const loaded = { schedules: false, days: false, backlogs: false, genres: false };
+  const clone = (o) => JSON.parse(JSON.stringify(o));
+  const stable = (v) => JSON.stringify(v, (k, x) => {
+    if (k && k[0] === '_') return undefined;
+    return x && typeof x === 'object' && !Array.isArray(x) ? Object.keys(x).sort().reduce((o, kk) => { o[kk] = x[kk]; return o; }, {}) : x;
+  });
+  const normBlock = (b) => ({ ...newBlock(), ...b });
+  const canon = {
+    schedules: (d) => ({ name: d.name || '', month: d.month || ymOf(new Date()), skipHolidays: !!d.skipHolidays,
+      defaultStart: d.defaultStart || '10:00', defaultGap: Number.isFinite(d.defaultGap) ? d.defaultGap : 15, endLimit: d.endLimit || '18:00' }),
+    days: (d) => ({ sid: d.sid, date: d.date, venue: d.venue || '', start: d.start || '10:00', section: d.section || '', blocks: (d.blocks || []).map(normBlock) }),
+    backlogs: (d) => ({ blocks: (d.blocks || []).map(normBlock) }),
+  };
+  const isBlankDraft = (sc) => !sc.days.length && !sc.backlog.length && sc.name === DEFAULT_NAME;
+  const isTyping = () => { const a = document.activeElement; return !!a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName) && !!a.closest('#daysView, #backlogList'); };
+
+  function setSync(kind, e) {
+    const el = $('syncTag');
+    el.classList.toggle('err', kind === 'error');
+    el.textContent = { loading: '読み込み中…', saving: '保存中…', saved: '共有に保存しました', '': '' }[kind] ?? '';
+    if (kind === 'error') {
+      el.textContent = e && e.code === 'quota_exceeded' ? '共有の保存容量がいっぱいです。変更はまだ共有されていません。'
+        : `共有への保存に失敗しました(${(e && e.code) || 'error'})。変更はまだ共有されていません。`;
+      console.warn(e);
+    }
+  }
+
+  // ローカルの内容とサーバー側(shadow)の差分だけを書き込む
+  async function flushOnce() {
+    const want = new Map();
+    store.schedules.forEach((sc) => {
+      if (isBlankDraft(sc)) return;
+      want.set(`schedules/${sc.id}`, canon.schedules(sc));
+      sc.days.forEach((d) => want.set(`days/${d.id}`, canon.days({ ...d, sid: sc.id })));
+      if (sc.backlog.length || shadow.has(`backlogs/${sc.id}`)) want.set(`backlogs/${sc.id}`, canon.backlogs({ blocks: sc.backlog }));
+    });
+    want.set('meta/genres', { list: store.genres });
+    const ops = [];
+    for (const [path, data] of want) { const j = stable(data); if (shadow.get(path) !== j) ops.push({ path, j }); }
+    for (const path of [...shadow.keys()]) if (!want.has(path)) ops.push({ path, j: null });
+    for (const op of ops) {
+      const [kind, id] = op.path.split('/');
+      const ref = dbx.doc(op.path);
+      if (op.j === null) {
+        await ref.delete();
+        shadow.delete(op.path);
+        if (remote[kind] instanceof Map) remote[kind].delete(id);
+      } else {
+        const data = JSON.parse(op.j), at = Date.now();
+        await ref.set({ ...data, by: myId, at });
+        shadow.set(op.path, op.j);
+        if (kind === 'meta') remote.genres = { data };
+        else remote[kind].set(id, { data, by: myId, at });
+      }
+    }
+  }
+  async function flush() {
+    flushTimer = null;
+    if (flushing) { flushAgain = true; return; }
+    flushing = true;
+    setSync('saving');
+    try {
+      do { flushAgain = false; await flushOnce(); } while (flushAgain && !flushTimer);
+      setSync('saved');
+    } catch (e) { setSync('error', e); }
+    flushing = false;
+    if (needRebuild && !flushTimer) applyRemote();
+  }
+
+  // 他の人の変更を取り込む
+  function onDocs(kind, snapshot) {
+    let changed = false;
+    snapshot.docChanges().forEach((ch) => {
+      const id = ch.doc.id;
+      if (ch.type === 'removed') { if (remote[kind].delete(id)) changed = true; return; }
+      const { by, at, ...rest } = clone(ch.doc.data() || {});
+      const data = canon[kind](rest), prev = remote[kind].get(id);
+      remote[kind].set(id, { data, by, at });
+      if (!prev || stable(prev.data) !== stable(data)) changed = true;
+    });
+    loaded[kind] = true;
+    if (changed || !initialApplied) applyRemote();
+  }
+  function onGenres(snapshot) {
+    const prev = remote.genres ? stable(remote.genres.data) : null;
+    const { by, at, ...rest } = snapshot.exists ? clone(snapshot.data()) : {};
+    remote.genres = snapshot.exists && Array.isArray(rest.list) ? { data: { list: rest.list } } : null;
+    loaded.genres = true;
+    if ((remote.genres ? stable(remote.genres.data) : null) !== prev || !initialApplied) applyRemote();
+  }
+  function applyRemote() {
+    if (!Object.values(loaded).every(Boolean)) return;
+    if (flushTimer || flushing) { needRebuild = true; return; }
+    if (isTyping()) { setTimeout(applyRemote, 700); return; }
+    needRebuild = false;
+    const prevCur = store.currentId;
+    const scheds = [...remote.schedules].map(([id, { data }]) => ({ id, ...data, history: [], days: [], backlog: [] }));
+    const byId = new Map(scheds.map((x) => [x.id, x]));
+    remote.days.forEach(({ data, by, at }, id) => {
+      const sc = byId.get(data.sid);
+      if (sc) sc.days.push({ id, date: data.date, venue: data.venue, start: data.start, section: data.section, blocks: data.blocks, _by: by, _at: at });
+    });
+    scheds.forEach((sc) => {
+      sc.days.sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id));
+      const bl = remote.backlogs.get(sc.id);
+      sc.backlog = bl ? bl.data.blocks : [];
+    });
+    if (remote.genres) store.genres = remote.genres.data.list;
+    if (!scheds.length) { placeholder = placeholder || newSchedule(DEFAULT_NAME); scheds.push(placeholder); }
+    store.schedules = scheds;
+    let saved = prevCur;
+    if (!initialApplied) { try { saved = localStorage.getItem(CUR_KEY); } catch (e) { saved = null; } }
+    const now = ymOf(new Date());
+    store.currentId = (scheds.find((x) => x.id === saved) || scheds.find((x) => x.month === now) || sortedSchedules().slice(-1)[0]).id;
+    shadow.clear();
+    remote.schedules.forEach(({ data }, id) => shadow.set(`schedules/${id}`, stable(data)));
+    remote.days.forEach(({ data }, id) => shadow.set(`days/${id}`, stable(data)));
+    remote.backlogs.forEach(({ data }, id) => shadow.set(`backlogs/${id}`, stable(data)));
+    if (remote.genres) shadow.set('meta/genres', stable(remote.genres.data));
+    store.schedules.forEach((sc) => lastJson.set(sc.id, contentJson(sc)));
+    initialApplied = true;
+    setSync('');
+    render();
+  }
+
+  // 変更履歴(共有): 文書 history/{auto}
+  async function sharedSnap(sc, reason, json) {
+    if (readOnly || !dbx || lastSnapJson.get(sc.id) === json) return;
+    lastSnapJson.set(sc.id, json);
+    lastSnapT.set(sc.id, Date.now());
+    try {
+      await dbx.collection('history').add({ sid: sc.id, t: Date.now(), reason, by: myId, json });
+      pruneHistory(sc.id, 30);
+    } catch (e) { lastSnapJson.delete(sc.id); console.warn(e); }
+  }
+  async function pruneHistory(sid, keep) {
+    try {
+      const q = await dbx.collection('history').where('sid', '==', sid).orderBy('t', 'asc').get();
+      for (let i = 0; i < q.docs.length - keep; i++) await dbx.doc(`history/${q.docs[i].id}`).delete();
+    } catch (e) { console.warn(e); }
+  }
+  const purgeHistory = (sid) => pruneHistory(sid, 0);
+
+  // 閲覧中の人の名前(更新者の表示)
+  async function fillNames() {
+    if (!userx) return;
+    const els = [...document.querySelectorAll('[data-by]')].filter((e) => e.dataset.by);
+    const ids = [...new Set(els.map((e) => e.dataset.by))];
+    if (!ids.length) return;
+    const ps = await userx.profiles(ids);
+    els.forEach((e) => {
+      const d = new Date(Number(e.dataset.at));
+      e.textContent = `更新: ${(ps[e.dataset.by] && ps[e.dataset.by].name) || 'メンバー'} ${d.getMonth() + 1}/${d.getDate()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    });
+  }
+
+  function renderShareBar() {
+    $('shareBar').hidden = mode !== 'shared';
+    if (mode !== 'shared') return;
+    $('modeTag').textContent = readOnly ? '共有中・閲覧のみ' : '共有中・変更は全員に反映されます';
+    $('modeTag').classList.toggle('ro', readOnly);
+    $('btnMigrate').hidden = readOnly || remote.schedules.size > 0 || !localData();
+  }
+  function localData() {
+    try {
+      const st = JSON.parse(localStorage.getItem(STORAGE_KEY));
+      if (st && Array.isArray(st.schedules) && st.schedules.some((sc) => (sc.days && sc.days.length) || (sc.backlog && sc.backlog.length))) return st;
+    } catch (e) { /* ローカルデータなし */ }
+    return null;
+  }
+  async function migrateLocal() {
+    const st = localData();
+    if (!st || !(await askConfirm('このブラウザに保存されているスケジュールを、共有データに移します。\n共有を開いている全員に表示されます。', '共有に移す'))) return;
+    store.schedules = st.schedules.map((sc) => ({ ...newSchedule(sc.name || ''), ...sc, history: [] }));
+    if (Array.isArray(st.genres)) store.genres = st.genres;
+    store.currentId = store.schedules[0].id;
+    commit();
+    notify('共有に移しました。');
+  }
+
+  function startLocal() { mode = 'local'; render(); }
+  async function startShared(db, user) {
+    mode = 'shared';
+    dbx = db;
+    userx = user;
+    myId = user ? await user.id() : null;
+    readOnly = (user ? await user.can('data.write') : null) === false;
+    placeholder = newSchedule(DEFAULT_NAME);
+    store.schedules = [placeholder];
+    store.currentId = placeholder.id;
+    store.genres = DEFAULT_GENRES.map((g) => ({ ...g }));
+    const fail = (e) => { setSync('error', e); if (e && e.code === 'revoked') { readOnly = true; render(); } };
+    db.collection('schedules').onSnapshot((x) => onDocs('schedules', x), fail);
+    db.collection('days').onSnapshot((x) => onDocs('days', x), fail);
+    db.collection('backlogs').onSnapshot((x) => onDocs('backlogs', x), fail);
+    db.doc('meta/genres').onSnapshot(onGenres, fail);
+    render();
+    setSync('loading');
+  }
+  async function start() {
+    if (!(window.claude && typeof window.claude.use === 'function')) return startLocal();
+    $('loading').hidden = false;
+    let db = null, user = null;
+    try { [db, user] = await Promise.all([window.claude.use('db'), window.claude.use('user')]); } catch (e) { db = null; }
+    $('loading').hidden = true;
+    return db ? startShared(db, user) : startLocal();
   }
 
   // ---------- スケジュール管理 ----------
@@ -1005,9 +1314,10 @@
     $('genreAdd').addEventListener('click', () => { genreRows.push({ orig: '', name: '', color: '#7b8494' }); renderGenreRows(); });
     $('genreCancel').addEventListener('click', () => $('genreDlg').close());
     $('genreForm').addEventListener('submit', (e) => { e.preventDefault(); saveGenres(); });
-    $('btnDelSched').addEventListener('click', () => {
+    $('btnDelSched').addEventListener('click', async () => {
       const s = cur();
-      if (!confirm(`「${monthLabel(s.month)} ${s.name || '無題'}」を削除しますか?(変更履歴も消えます)`)) return;
+      if (!(await askConfirm(`「${monthLabel(s.month)} ${s.name || '無題'}」を削除しますか?\n(このスケジュールの変更履歴も消えます)`, '削除する'))) return;
+      if (mode === 'shared') purgeHistory(s.id);
       store.schedules = store.schedules.filter((x) => x.id !== s.id);
       if (!store.schedules.length) store.schedules.push(newSchedule('新しい研修スケジュール'));
       store.currentId = sortedSchedules().slice(-1)[0].id;
@@ -1058,10 +1368,13 @@
     $('btnPrint').addEventListener('click', () => window.print());
     $('btnCopy').addEventListener('click', async () => {
       const text = toDelimited(buildRows(cur()), '\t');
-      try { await navigator.clipboard.writeText(text); alert('コピーしました。スプレッドシートのセルを選んで貼り付けてください。'); } catch (e) {
-        prompt('自動コピーできませんでした。下の内容をコピーしてください', text);
+      try { await navigator.clipboard.writeText(text); notify('コピーしました。スプレッドシートのセルを選んで貼り付けてください。'); } catch (e) {
+        $('copyText').value = text;
+        $('copyDlg').showModal();
+        $('copyText').select();
       }
     });
+    $('copyClose').addEventListener('click', () => $('copyDlg').close());
     $('btnImport').addEventListener('click', () => {
       $('importText').value = ''; $('importFile').value = '';
       $('importYear').value = new Date().getFullYear();
@@ -1077,13 +1390,8 @@
     $('importForm').addEventListener('submit', (e) => { e.preventDefault(); doImport(); });
     $('importCancel').addEventListener('click', () => $('importDlg').close());
     $('btnSample').addEventListener('click', () => { $('importText').value = SAMPLE_CSV; $('importYear').value = new Date().getFullYear(); doImport(); });
-    if (window.__DEMO__ && !cur().days.length && !cur().backlog.length) {
-      const sample = parseSheetRows(parseDelimited(SAMPLE_CSV, ','), new Date().getFullYear());
-      Object.assign(cur(), { name: '新入社員研修(サンプル)', days: sample.days, backlog: sample.backlog, month: sample.days[0].date.slice(0, 7) });
-      lastJson.set(cur().id, contentJson(cur()));
-      save();
-    }
-    render();
+    $('btnMigrate').addEventListener('click', migrateLocal);
+    start();
   }
   init();
 })();
