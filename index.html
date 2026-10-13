@@ -52,10 +52,28 @@
     </details>
     <span id="summary" class="summary"></span>
   </div>
+  <div class="viewbar">
+    <div class="tabs" role="group" aria-label="表示切替">
+      <button type="button" data-view="list" aria-pressed="true">日ごと</button>
+      <button type="button" data-view="month" aria-pressed="false">月カレンダー</button>
+      <button type="button" data-view="year" aria-pressed="false">年間</button>
+    </div>
+    <div id="calNav" class="cal-nav" hidden>
+      <button id="calPrev" type="button" class="ghost" aria-label="前へ">&lt;</button>
+      <strong id="calLabel"></strong>
+      <button id="calNext" type="button" class="ghost" aria-label="次へ">&gt;</button>
+      <button id="calToday" type="button" class="ghost">今日</button>
+      <button id="calFirst" type="button" class="ghost">研修開始月</button>
+      <span id="calStat" class="summary"></span>
+    </div>
+  </div>
   <div id="banner" class="banner" hidden></div>
 
-  <main class="layout">
-    <section id="daysView" aria-label="日ごとのスケジュール"></section>
+  <main id="mainLayout" class="layout">
+    <div class="main-col">
+      <section id="daysView" aria-label="日ごとのスケジュール"></section>
+      <section id="calView" aria-label="カレンダー" hidden></section>
+    </div>
     <aside class="panel backlog" aria-label="未配置">
       <h2>未配置のコマ</h2>
       <p class="hint">日にちが決まっていないコマ置き場。ドラッグで日へ入れられます。</p>

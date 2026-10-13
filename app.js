@@ -3,15 +3,20 @@
 
   const STORAGE_KEY = 'training-schedule-v2';
   const DOW = ['日', '月', '火', '水', '木', '金', '土'];
-  // 祝日(2026-2027)。「祝日を飛ばす」設定のときの営業日判定にだけ使う
-  const HOLIDAYS = new Set([
-    '2026-01-01', '2026-01-12', '2026-02-11', '2026-02-23', '2026-03-20', '2026-04-29', '2026-05-03', '2026-05-04',
-    '2026-05-05', '2026-05-06', '2026-07-20', '2026-08-11', '2026-09-21', '2026-09-22', '2026-09-23', '2026-10-12',
-    '2026-11-03', '2026-11-23',
-    '2027-01-01', '2027-01-11', '2027-02-11', '2027-02-23', '2027-03-21', '2027-03-22', '2027-04-29', '2027-05-03',
-    '2027-05-04', '2027-05-05', '2027-07-19', '2027-08-11', '2027-09-20', '2027-09-23', '2027-10-11', '2027-11-03',
-    '2027-11-23',
-  ]);
+  // 祝日(2026-2027)。カレンダー表示と、ずらすとき祝日を飛ばす設定の営業日判定に使う
+  const HOLIDAY_NAMES = {
+    '2026-01-01': '元日', '2026-01-12': '成人の日', '2026-02-11': '建国記念の日', '2026-02-23': '天皇誕生日',
+    '2026-03-20': '春分の日', '2026-04-29': '昭和の日', '2026-05-03': '憲法記念日', '2026-05-04': 'みどりの日',
+    '2026-05-05': 'こどもの日', '2026-05-06': '振替休日', '2026-07-20': '海の日', '2026-08-11': '山の日',
+    '2026-09-21': '敬老の日', '2026-09-22': '国民の休日', '2026-09-23': '秋分の日', '2026-10-12': 'スポーツの日',
+    '2026-11-03': '文化の日', '2026-11-23': '勤労感謝の日',
+    '2027-01-01': '元日', '2027-01-11': '成人の日', '2027-02-11': '建国記念の日', '2027-02-23': '天皇誕生日',
+    '2027-03-21': '春分の日', '2027-03-22': '振替休日', '2027-04-29': '昭和の日', '2027-05-03': '憲法記念日',
+    '2027-05-04': 'みどりの日', '2027-05-05': 'こどもの日', '2027-07-19': '海の日', '2027-08-11': '山の日',
+    '2027-09-20': '敬老の日', '2027-09-23': '秋分の日', '2027-10-11': 'スポーツの日', '2027-11-03': '文化の日',
+    '2027-11-23': '勤労感謝の日',
+  };
+  const HOLIDAYS = new Set(Object.keys(HOLIDAY_NAMES));
   const SAMPLE_CSV = `,,,,,,,,,,,,,,,
 ,日程,会場,時間,分,担当,担当者,研修内容,テスト,目的,詳細,資料1,資料2,テスト,進捗,memo
 ,10/1,本社 会議室A,10:00-10:30,30,人事,担当A,オリエン,,研修全体のイメージを伝達する,研修の目的 スケジュール共有 自己紹介,オリエン.pptx,-,-,完了,
@@ -34,6 +39,9 @@
 `;
 
   const $ = (id) => document.getElementById(id);
+  let view = 'list';      // list | month | year
+  let calMonth = null;    // 表示中の月(その月の1日)
+  let calFor = null;      // calMonth がどのスケジュール用か
 
   // ---------- 日付・時刻 ----------
   const pad = (n) => String(n).padStart(2, '0');
@@ -59,6 +67,11 @@
     for (let guard = 0; fmtDate(r) !== target && guard < 4000; guard++) { r = addDays(r, step); if (isBiz(r, skipHol)) n += step; }
     return n;
   }
+
+  const restLabel = (dateStr) => {
+    const h = HOLIDAY_NAMES[dateStr], w = parseDate(dateStr).getDay();
+    return h ? `祝日(${h})` : w === 0 ? '日曜' : w === 6 ? '土曜' : '';
+  };
 
   // ---------- データ ----------
   function newSchedule(name) {
@@ -105,6 +118,12 @@
       ? s.backlog.map((b) => backlogHtml(s, b)).join('')
       : '<p class="hint">なし</p>';
     renderSummary(s);
+    $('daysView').hidden = view !== 'list';
+    $('calView').hidden = view === 'list';
+    $('calNav').hidden = view === 'list';
+    $('mainLayout').classList.toggle('no-side', view === 'year');
+    document.querySelectorAll('.tabs button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.view === view)));
+    if (view !== 'list') renderCal(s);
   }
 
   function renderTop(s) {
@@ -131,6 +150,10 @@
     const seen = new Map();
     s.days.forEach((d) => seen.set(d.date, (seen.get(d.date) || 0) + 1));
     for (const [date, n] of seen) if (n > 1) msgs.push(`${jpDate(date)} が${n}日分重なっています(日付を直すか、内容を統合してください)`);
+    s.days.forEach((d) => {
+      const r = restLabel(d.date);
+      if (r) msgs.push(`${jpDate(d.date)} は${r}です(研修が入っています)`);
+    });
     const el = $('banner');
     el.hidden = !msgs.length;
     el.innerHTML = msgs.length ? '<b>⚠ 確認してください</b><ul>' + msgs.map((m) => `<li>${esc(m)}</li>`).join('') + '</ul>' : '';
@@ -148,7 +171,7 @@
     return `<article class="day" data-day="${d.id}">
       <div class="day-head">
         <input type="date" data-f="date" value="${esc(d.date)}" aria-label="日付">
-        <span class="dow dow-${dow}">(${DOW[dow]})</span>
+        <span class="dow dow-${dow}">(${DOW[dow]})</span>${HOLIDAY_NAMES[d.date] ? `<span class="hol-tag">${esc(HOLIDAY_NAMES[d.date])}</span>` : ''}
         <input class="section" data-f="section" value="${esc(d.section)}" placeholder="区分(例: 営業研修)" aria-label="区分">
         <label>会場<input class="venue" data-f="venue" value="${esc(d.venue)}" placeholder="例: 本社 会議室A"></label>
         <label>開始<input type="time" data-f="start" value="${esc(d.start)}"></label>
@@ -212,6 +235,103 @@
         <button type="button" class="small danger" data-act="blk-del">削除</button>
       </div>
     </div>`;
+  }
+
+
+  // ---------- カレンダー ----------
+  function ensureCal(s) {
+    if (calFor !== s.id || !calMonth) {
+      calFor = s.id;
+      const base = s.days.length ? parseDate(s.days[0].date) : new Date();
+      calMonth = new Date(base.getFullYear(), base.getMonth(), 1);
+    }
+  }
+  function daysByDate(s) {
+    const m = new Map();
+    s.days.forEach((d) => { if (!m.has(d.date)) m.set(d.date, []); m.get(d.date).push(d); });
+    return m;
+  }
+  function renderCal(s) {
+    ensureCal(s);
+    const y = calMonth.getFullYear(), mo = calMonth.getMonth();
+    $('calLabel').textContent = view === 'year' ? `${y}年` : `${y}年${mo + 1}月`;
+    const inRange = s.days.filter((d) => { const x = parseDate(d.date); return x.getFullYear() === y && (view === 'year' || x.getMonth() === mo); });
+    const blocks = inRange.reduce((n, d) => n + d.blocks.length, 0);
+    $('calStat').textContent = `研修 ${inRange.length}日 / ${blocks}コマ`;
+    $('calView').innerHTML = view === 'year' ? yearHtml(s, y) : monthHtml(s, y, mo);
+  }
+
+  function monthHtml(s, y, mo) {
+    const by = daysByDate(s);
+    const first = new Date(y, mo, 1);
+    const weeks = Math.ceil((first.getDay() + new Date(y, mo + 1, 0).getDate()) / 7);
+    const start = addDays(first, -first.getDay());
+    const todayKey = fmtDate(new Date());
+    let html = '<div class="cal-scroll"><div class="cal">' +
+      DOW.map((w, i) => `<div class="cal-dow dow-${i}">${w}</div>`).join('');
+    for (let i = 0; i < weeks * 7; i++) {
+      const d = addDays(start, i), key = fmtDate(d), w = d.getDay();
+      const days = by.get(key) || [];
+      const hol = HOLIDAY_NAMES[key] || '';
+      const cls = ['cal-cell', d.getMonth() !== mo ? 'out' : '', days.length ? 'has' : '', key === todayKey ? 'today' : ''].filter(Boolean).join(' ');
+      const lines = [];
+      days.forEach((day) => layout(day).forEach(({ b, s: bs }) => lines.push({ b, bs })));
+      const MAX = 5;
+      html += `<div class="${cls}" data-caldate="${key}"${days.length ? ` data-calday="${days[0].id}" draggable="true" title="クリックで詳細 / ドラッグで日付を移動"` : ''}>
+        <div class="cal-top"><span class="cal-num dow-${hol ? 0 : w}">${d.getDate()}</span>${hol ? `<span class="cal-hol">${esc(hol)}</span>` : ''}
+          ${days.length ? '' : `<button type="button" class="cal-add" data-act="cal-add" data-date="${key}" aria-label="${d.getMonth() + 1}月${d.getDate()}日に研修日を追加">＋</button>`}</div>
+        ${days.map((day) => `${day.section ? `<div class="cal-sec">${esc(day.section)}</div>` : ''}${day.venue ? `<div class="cal-venue">${esc(day.venue)}</div>` : ''}`).join('')}
+        ${lines.slice(0, MAX).map(({ b, bs }) => `<div class="cal-line${b.done ? ' done' : ''}${b.test ? ' test' : ''}"><span class="t">${fmtMin(bs)}</span> ${esc(b.title)}</div>`).join('')}
+        ${lines.length > MAX ? `<div class="cal-more">ほか${lines.length - MAX}件</div>` : ''}
+      </div>`;
+    }
+    return html + '</div></div>';
+  }
+
+  function yearHtml(s, y) {
+    const by = daysByDate(s);
+    const todayKey = fmtDate(new Date());
+    let html = '<div class="year">';
+    for (let mo = 0; mo < 12; mo++) {
+      const first = new Date(y, mo, 1), n = new Date(y, mo + 1, 0).getDate();
+      let cells = DOW.map((w, i) => `<span class="mh dow-${i}">${w}</span>`).join('') + '<span></span>'.repeat(first.getDay());
+      let count = 0;
+      for (let day = 1; day <= n; day++) {
+        const d = new Date(y, mo, day), key = fmtDate(d), days = by.get(key) || [];
+        const hol = HOLIDAY_NAMES[key];
+        if (days.length) count++;
+        const tip = days.length
+          ? `${jpDate(key)} ${days.map((x) => { const t = layout(x); return `${t.length ? fmtMin(t[0].s) + '–' + fmtMin(t[t.length - 1].e) : ''} ${x.venue || ''} ${x.blocks.length}コマ`; }).join(' / ')}`
+          : hol ? `${jpDate(key)} ${hol}` : '';
+        cells += `<span class="mc dow-${hol ? 0 : d.getDay()}${days.length ? ' has' : ''}${key === todayKey ? ' today' : ''}"${tip ? ` title="${esc(tip)}"` : ''}>${day}</span>`;
+      }
+      html += `<button type="button" class="mini" data-month="${mo}"><h4>${mo + 1}月<small>${count ? `研修${count}日` : ''}</small></h4><div class="mini-grid">${cells}</div></button>`;
+    }
+    return html + '</div>';
+  }
+
+  function calNavigate(n) {
+    calMonth = view === 'year' ? new Date(calMonth.getFullYear() + n, calMonth.getMonth(), 1) : new Date(calMonth.getFullYear(), calMonth.getMonth() + n, 1);
+    render();
+  }
+  function onCalClick(e) {
+    const s = cur();
+    const add = e.target.closest('[data-act="cal-add"]');
+    if (add) {
+      const last = s.days[s.days.length - 1];
+      s.days.push({ id: uid(), date: add.dataset.date, venue: last ? last.venue : '', start: s.defaultStart, section: '', blocks: [] });
+      sortDays(s);
+      return commit();
+    }
+    const mini = e.target.closest('[data-month]');
+    if (mini) { calMonth = new Date(calMonth.getFullYear(), Number(mini.dataset.month), 1); view = 'month'; return render(); }
+    const cell = e.target.closest('[data-calday]');
+    if (cell) {
+      view = 'list';
+      render();
+      const el = document.querySelector(`[data-day="${cell.dataset.calday}"]`);
+      if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'start' }); el.classList.add('flash'); setTimeout(() => el.classList.remove('flash'), 1600); }
+    }
   }
 
   // ---------- 操作 ----------
@@ -324,7 +444,25 @@
   }
 
   // ---------- ドラッグ&ドロップ ----------
-  let dragId = null;
+  let dragId = null, dragDay = null;
+  function dropOnDate(key) {
+    const s = cur(), by = daysByDate(s);
+    if (dragDay) {
+      const a = s.days.find((d) => d.id === dragDay), target = by.get(key);
+      if (!a || a.date === key) return;
+      if (target) { const t = target[0]; [a.date, t.date] = [t.date, a.date]; } else a.date = key;
+      sortDays(s);
+    } else if (dragId) {
+      let day = (by.get(key) || [])[0];
+      if (!day) {
+        const last = s.days[s.days.length - 1];
+        day = { id: uid(), date: key, venue: last ? last.venue : '', start: s.defaultStart, section: '', blocks: [] };
+        s.days.push(day);
+        sortDays(s);
+      }
+      moveBlock(dragId, day.id, day.blocks.length);
+    }
+  }
   function dropIndex(container, y) {
     const kids = [...container.querySelectorAll(':scope > [data-block]')];
     const i = kids.findIndex((k) => { const r = k.getBoundingClientRect(); return y < r.top + r.height / 2; });
@@ -339,6 +477,14 @@
     if (g) g.closest('[data-block]').draggable = true;
   });
   document.addEventListener('dragstart', (e) => {
+    const cellEl = e.target.closest && e.target.closest('[data-calday]');
+    if (cellEl) {
+      dragDay = cellEl.dataset.calday;
+      e.dataTransfer.setData('text/plain', dragDay);
+      e.dataTransfer.effectAllowed = 'move';
+      cellEl.classList.add('dragging');
+      return;
+    }
     const el = e.target.closest && e.target.closest('[data-block]');
     if (!el || !el.draggable) return;
     dragId = el.dataset.block;
@@ -347,11 +493,18 @@
     el.classList.add('dragging');
   });
   document.addEventListener('dragend', () => {
-    dragId = null;
+    dragId = null; dragDay = null;
     document.querySelectorAll('[data-block]').forEach((el) => { el.draggable = false; });
     clearDropMarks();
   });
   document.addEventListener('dragover', (e) => {
+    const cell = (dragId || dragDay) && e.target.closest && e.target.closest('[data-caldate]');
+    if (cell) {
+      e.preventDefault();
+      document.querySelectorAll('.drop-target').forEach((el) => el.classList.remove('drop-target'));
+      cell.classList.add('drop-target');
+      return;
+    }
     const box = dragId && e.target.closest && e.target.closest('[data-drop]');
     if (!box) return;
     e.preventDefault();
@@ -361,6 +514,14 @@
     (kids[index] || box).classList.add(kids[index] ? 'insert-before' : 'insert-end');
   });
   document.addEventListener('drop', (e) => {
+    const cell = (dragId || dragDay) && e.target.closest && e.target.closest('[data-caldate]');
+    if (cell) {
+      e.preventDefault();
+      dropOnDate(cell.dataset.caldate);
+      dragId = null; dragDay = null;
+      clearDropMarks();
+      return commit();
+    }
     const box = dragId && e.target.closest && e.target.closest('[data-drop]');
     if (!box) return;
     e.preventDefault();
@@ -606,6 +767,12 @@
       commit();
     });
 
+    document.querySelectorAll('.tabs button').forEach((b) => b.addEventListener('click', () => { view = b.dataset.view; render(); }));
+    $('calPrev').addEventListener('click', () => calNavigate(-1));
+    $('calNext').addEventListener('click', () => calNavigate(1));
+    $('calToday').addEventListener('click', () => { const t = new Date(); calMonth = new Date(t.getFullYear(), t.getMonth(), 1); render(); });
+    $('calFirst').addEventListener('click', () => { calFor = null; render(); });
+    $('calView').addEventListener('click', onCalClick);
     $('btnAddDay').addEventListener('click', () => { addDay(cur()); commit(); });
     $('btnAddBacklog').addEventListener('click', () => openBlockDialog(null, 'backlog'));
     $('daysView').addEventListener('click', onClick);
