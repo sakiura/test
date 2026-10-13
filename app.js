@@ -659,6 +659,11 @@
     $('importForm').addEventListener('submit', (e) => { e.preventDefault(); doImport(); });
     $('importCancel').addEventListener('click', () => $('importDlg').close());
     $('btnSample').addEventListener('click', () => { $('importText').value = SAMPLE_CSV; $('importYear').value = new Date().getFullYear(); doImport(); });
+    if (window.__DEMO__ && !cur().days.length && !cur().backlog.length) {
+      const sample = parseSheetRows(parseDelimited(SAMPLE_CSV, ','), new Date().getFullYear());
+      Object.assign(cur(), { name: '新入社員研修(サンプル)', days: sample.days, backlog: sample.backlog });
+      save();
+    }
     render();
   }
   init();

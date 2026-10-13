@@ -10,10 +10,14 @@
   --radius: 10px;
 }
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     --bg: #14171c; --panel: #1d2128; --text: #e8eaee; --muted: #9aa3b2;
-    --line: #2d333d; --primary: #6b9bff; --danger: #ff7b7b; --ok: #4ade80;
+    --line: #2d333d; --primary: #6b9bff; --danger: #ff7b7b; --ok: #4ade80; color-scheme: dark;
   }
+}
+:root[data-theme="dark"] {
+  --bg: #14171c; --panel: #1d2128; --text: #e8eaee; --muted: #9aa3b2;
+  --line: #2d333d; --primary: #6b9bff; --danger: #ff7b7b; --ok: #4ade80; color-scheme: dark;
 }
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
@@ -40,7 +44,7 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--primary); o
   padding: 10px 16px; background: var(--panel); border-bottom: 1px solid var(--line);
 }
 .top-left, .actions { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
-.sched-name { font-weight: 700; font-size: 16px; width: 260px; }
+.sched-name { font-weight: 700; font-size: 16px; width: 260px; max-width: 100%; }
 
 .toolbar { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-start; padding: 12px 16px 0; }
 .summary { color: var(--muted); font-size: 12px; margin-left: auto; align-self: center; }
