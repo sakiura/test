@@ -14,7 +14,6 @@
       <select id="schedSelect" aria-label="スケジュール切替"></select>
       <button id="schedNext" class="ghost" type="button" aria-label="次の月のスケジュール">&gt;</button>
       <input id="schedMonth" type="month" aria-label="対象月">
-      <label class="end-date">研修終了日<input id="schedEnd" type="date" aria-label="研修終了日"></label>
       <input id="schedName" class="sched-name" aria-label="スケジュール名" placeholder="スケジュール名(例: 202610スケジュール)">
       <span id="pastTag" class="past-tag" hidden>過去の月</span>
       <button id="btnNewMonth" class="primary" type="button">＋ 月を追加</button>
@@ -46,6 +45,10 @@
           <button id="btnBulkMinus" type="button">前へ</button>
         </div>
         <hr>
+        <div class="bulk-row">
+          <label>研修終了日 <input id="schedEnd" type="date"></label>
+          <span class="hint" style="margin:0">この月の研修が終わる日(任意)。これより後に研修日があると警告します。</span>
+        </div>
         <div class="bulk-row">
           <label><input id="setSkipHol" type="checkbox"> ずらすとき・月を追加するとき祝日を飛ばす(通常はオフ。祝日も研修を行う)</label>
         </div>
