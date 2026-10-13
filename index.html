@@ -3,102 +3,114 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>研修スケジュール作成</title>
+  <title>研修スケジュール管理</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
   <header class="topbar">
-    <div class="title-wrap">
-      <input id="programName" class="program-name" aria-label="研修名" placeholder="研修名を入力(例: 2026年度 新入社員研修)">
+    <div class="top-left">
+      <select id="schedSelect" aria-label="スケジュール切替"></select>
+      <input id="schedName" class="sched-name" aria-label="スケジュール名" placeholder="スケジュール名(例: 202610スケジュール)">
+      <button id="btnNewSched" class="ghost" type="button">新規</button>
+      <button id="btnDupSched" class="ghost" type="button" title="日付をずらして来月分を作るときに便利">複製</button>
+      <button id="btnDelSched" class="ghost danger" type="button">削除</button>
     </div>
     <div class="actions">
-      <button id="btnSample" class="ghost" type="button">サンプル読込</button>
-      <label class="btn ghost" for="fileImport">JSON読込</label>
-      <input id="fileImport" type="file" accept=".json,application/json" hidden>
+      <button id="btnImport" class="ghost" type="button">取り込み</button>
+      <button id="btnCopy" class="ghost" type="button" title="スプレッドシートにそのまま貼り付けられる形式でコピー">シートへ貼付用コピー</button>
+      <button id="btnCsv" class="ghost" type="button">CSV</button>
+      <button id="btnIcs" class="ghost" type="button">カレンダー(.ics)</button>
       <button id="btnJson" class="ghost" type="button">JSON保存</button>
-      <button id="btnCsv" class="ghost" type="button">CSV出力</button>
-      <button id="btnIcs" class="ghost" type="button">カレンダー(.ics)出力</button>
       <button id="btnPrint" class="ghost" type="button">印刷</button>
     </div>
   </header>
 
-  <main class="layout">
-    <section class="panel form-panel" aria-labelledby="formTitle">
-      <h2 id="formTitle">プログラムを追加</h2>
-      <form id="sessionForm" autocomplete="off">
-        <input type="hidden" id="editId">
-        <label>科目・プログラム名 <span class="req">必須</span>
-          <input id="fTitle" required placeholder="例: ビジネスマナー">
-        </label>
-        <div class="row">
-          <label>日付 <span class="req">必須</span>
-            <input id="fDate" type="date" required>
-          </label>
-          <label>種別
-            <select id="fCategory"></select>
-          </label>
+  <div class="toolbar">
+    <button id="btnAddDay" class="primary" type="button">＋ 日を追加</button>
+    <details class="bulk">
+      <summary>日程の一括変更・設定</summary>
+      <div class="bulk-body">
+        <div class="bulk-row">
+          <label>開始日を変更 <input id="bulkStart" type="date"></label>
+          <button id="btnBulkStart" type="button">全体をずらす</button>
         </div>
-        <div class="row">
-          <label>開始 <span class="req">必須</span>
-            <input id="fStart" type="time" required value="09:00">
-          </label>
-          <label>終了 <span class="req">必須</span>
-            <input id="fEnd" type="time" required value="10:00">
-          </label>
+        <div class="bulk-row">
+          <label>全体を <input id="bulkN" type="number" value="1" style="width:64px"> 営業日</label>
+          <button id="btnBulkPlus" type="button">後ろへ</button>
+          <button id="btnBulkMinus" type="button">前へ</button>
         </div>
-        <div class="row">
-          <label>講師・担当
-            <input id="fInstructor" placeholder="例: 山田">
-          </label>
-          <label>場所
-            <input id="fLocation" placeholder="例: 会議室A">
-          </label>
+        <hr>
+        <div class="bulk-row">
+          <label><input id="setSkipHol" type="checkbox"> ずらすとき祝日を飛ばす</label>
         </div>
-        <label>メモ
-          <textarea id="fNote" rows="2" placeholder="持ち物、事前課題など"></textarea>
-        </label>
-        <fieldset id="repeatBox">
-          <legend>繰り返し(新規追加時のみ)</legend>
-          <div class="row">
-            <label>頻度
-              <select id="fRepeat">
-                <option value="none">なし</option>
-                <option value="daily">毎営業日(土日除く)</option>
-                <option value="weekly">毎週</option>
-              </select>
-            </label>
-            <label>回数(初回含む)
-              <input id="fCount" type="number" min="2" max="60" value="5">
-            </label>
-          </div>
-        </fieldset>
-        <p id="formError" class="error" role="alert" hidden></p>
-        <div class="form-actions">
-          <button id="btnSubmit" type="submit" class="primary">追加</button>
-          <button id="btnCancel" type="button" class="ghost" hidden>編集をやめる</button>
+        <div class="bulk-row">
+          <label>標準の開始時刻 <input id="setStart" type="time"></label>
+          <label>標準の空き(分) <input id="setGap" type="number" min="0" step="5" style="width:64px"></label>
+          <label>終了の目安 <input id="setEnd" type="time"></label>
         </div>
-      </form>
-    </section>
-
-    <section class="panel view-panel" aria-label="スケジュール">
-      <div class="view-head">
-        <div class="tabs" role="tablist">
-          <button role="tab" id="tabList" aria-selected="true">一覧</button>
-          <button role="tab" id="tabWeek" aria-selected="false">週表示</button>
-        </div>
-        <div id="weekNav" class="week-nav" hidden>
-          <button id="prevWeek" class="ghost" type="button" aria-label="前の週">&lt;</button>
-          <span id="weekLabel"></span>
-          <button id="nextWeek" class="ghost" type="button" aria-label="次の週">&gt;</button>
-          <button id="todayWeek" class="ghost" type="button">開始週へ</button>
-        </div>
-        <div id="summary" class="summary"></div>
       </div>
-      <div id="conflictBanner" class="banner" hidden></div>
-      <div id="listView"></div>
-      <div id="weekView" hidden></div>
-    </section>
+    </details>
+    <span id="summary" class="summary"></span>
+  </div>
+  <div id="banner" class="banner" hidden></div>
+
+  <main class="layout">
+    <section id="daysView" aria-label="日ごとのスケジュール"></section>
+    <aside class="panel backlog" aria-label="未配置">
+      <h2>未配置のコマ</h2>
+      <p class="hint">日にちが決まっていないコマ置き場。ドラッグで日へ入れられます。</p>
+      <div id="backlogList" class="backlog-list" data-drop="backlog"></div>
+      <button id="btnAddBacklog" type="button">＋ 未配置に追加</button>
+    </aside>
   </main>
+
+  <dialog id="blockDlg">
+    <form id="blockForm" autocomplete="off">
+      <h3 id="blockDlgTitle">コマを編集</h3>
+      <label>研修内容 <span class="req">必須</span><input id="eTitle" required></label>
+      <div class="grid3">
+        <label>長さ(分)<input id="eMinutes" type="number" min="5" step="5" required></label>
+        <label>前との空き(分)<input id="eGap" type="number" min="0" step="5"></label>
+        <label>会場(この回のみ)<input id="eVenue" placeholder="日の会場と同じなら空欄"></label>
+      </div>
+      <div class="grid2">
+        <label>担当(部署)<input id="eDept"></label>
+        <label>担当者<input id="ePerson"></label>
+      </div>
+      <label>目的<input id="ePurpose"></label>
+      <label>詳細<textarea id="eDetail" rows="3"></textarea></label>
+      <div class="grid2">
+        <label>資料<input id="eMaterials"></label>
+        <label>テスト<input id="eTest" placeholder="例: 筆記テスト"></label>
+      </div>
+      <div class="grid2">
+        <label>テスト結果・備考<input id="eResult"></label>
+        <label>memo<input id="eMemo"></label>
+      </div>
+      <label class="inline"><input id="eDone" type="checkbox"> 完了</label>
+      <div class="dlg-actions">
+        <button type="submit" class="primary">保存</button>
+        <button type="button" id="blockCancel" class="ghost">キャンセル</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="importDlg">
+    <form id="importForm">
+      <h3>スプレッドシートから取り込み</h3>
+      <p class="hint">シートの表(「日程・会場・時間・分・担当…」の見出しを含む範囲)をコピーして貼り付けるか、CSV/JSONファイルを選んでください。新しいスケジュールとして追加されます。</p>
+      <textarea id="importText" rows="8" placeholder="ここに貼り付け(Ctrl/⌘+V)"></textarea>
+      <div class="grid2">
+        <label>ファイル<input id="importFile" type="file" accept=".csv,.tsv,.txt,.json"></label>
+        <label>年(日付が「10/1」形式のとき)<input id="importYear" type="number" min="2000" max="2100"></label>
+      </div>
+      <div class="dlg-actions">
+        <button type="submit" class="primary">取り込む</button>
+        <button type="button" id="btnSample" class="ghost">サンプルを作成</button>
+        <button type="button" id="importCancel" class="ghost">閉じる</button>
+      </div>
+    </form>
+  </dialog>
 
   <script src="app.js"></script>
 </body>
