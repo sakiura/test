@@ -86,6 +86,8 @@
   let view = 'list';      // list | month | year
   let calMonth = null;    // 表示中の月(その月の1日)
   let calFor = null;      // calMonth がどのスケジュール用か
+  const PAGE_DAYS = 5;     // 日ごと表示は5日ずつページに分ける(週ごとは1週間ずつ)
+  let dayPage = 0, pageFor = null, pageAll = false;
   let dayMode = '1';      // 日ごと表示の並べ方(この端末だけの設定): 1 = 縦に1日ずつ / 2 = 2日ずつ横に / week = 暦の月〜金で週ごとに
   try {
     const v = localStorage.getItem('training-schedule-cols');
@@ -236,7 +238,7 @@
     renderBanner(s);
     $('daysView').innerHTML = !s.days.length
       ? '<p class="empty">まだ日程がありません。「＋ 日を追加」か「取り込み」から始めてください。</p>'
-      : dayMode === 'week' ? weekHtml(s) : s.days.map((d, i) => dayHtml(s, d, i)).join('');
+      : listHtml(s);
     $('backlogList').innerHTML = s.backlog.length
       ? s.backlog.map((b) => backlogHtml(s, b)).join('')
       : '<p class="hint">なし</p>';
@@ -358,19 +360,66 @@
     </article>`;
   }
 
+  // ---------- 日ごと: ページ分け ----------
+  // 通常は5日ずつ、週ごと表示は暦の1週間(月〜金)ずつを1ページにする
+  function listPages(s) {
+    if (dayMode === 'week') {
+      const byWeek = new Map();
+      s.days.forEach((d) => {
+        const dt = parseDate(d.date), k = fmtDate(addDays(dt, -((dt.getDay() + 6) % 7)));
+        if (!byWeek.has(k)) byWeek.set(k, []);
+        byWeek.get(k).push(d);
+      });
+      const hasWeekend = s.days.some((d) => { const w = parseDate(d.date).getDay(); return w === 0 || w === 6; });
+      return [...byWeek.keys()].sort().map((mon) => ({
+        mon, days: byWeek.get(mon),
+        label: `${jpDate(mon)}〜${jpDate(fmtDate(addDays(parseDate(mon), hasWeekend ? 6 : 4)))}(${byWeek.get(mon).length}日)`,
+      }));
+    }
+    const pages = [];
+    for (let i = 0; i < s.days.length; i += PAGE_DAYS) {
+      const days = s.days.slice(i, i + PAGE_DAYS);
+      pages.push({ days, label: `${i + 1}〜${i + days.length}日目(${jpDate(days[0].date)}〜${jpDate(days[days.length - 1].date)})` });
+    }
+    return pages;
+  }
+  const pageOfDay = (s, id) => listPages(s).findIndex((pg) => pg.days.some((d) => d.id === id));
+  function pagerHtml(pages) {
+    if (pages.length < 2) return '';
+    const unit = dayMode === 'week' ? '週' : `${PAGE_DAYS}日`;
+    const first = pageAll || dayPage <= 0, last = pageAll || dayPage >= pages.length - 1;
+    return `<nav class="pager" aria-label="ページ送り">
+      <button type="button" class="ghost" data-act="pg-prev"${first ? ' disabled' : ''}>&lt; 前の${unit}</button>
+      <select data-act="pg-sel" aria-label="ページを選ぶ">${pages.map((pg, i) =>
+        `<option value="${i}"${!pageAll && i === dayPage ? ' selected' : ''}>${esc(pg.label)}</option>`).join('')}
+        <option value="all"${pageAll ? ' selected' : ''}>すべて表示(${pages.reduce((n, pg) => n + pg.days.length, 0)}日)</option></select>
+      <button type="button" class="ghost" data-act="pg-next"${last ? ' disabled' : ''}>次の${unit} &gt;</button>
+    </nav>`;
+  }
+  function listHtml(s) {
+    const pages = listPages(s);
+    if (pageFor !== s.id) {
+      // 別のスケジュールを開いたときは、今日を含むページ(なければ最初のページ)から
+      pageFor = s.id;
+      pageAll = false;
+      const today = fmtDate(new Date());
+      const i = pages.findIndex((pg) => pg.days.some((d) => d.date >= today));
+      dayPage = i >= 0 ? i : 0;
+    }
+    dayPage = Math.max(0, Math.min(dayPage, pages.length - 1));
+    const shown = pageAll ? pages : [pages[dayPage]];
+    const body = dayMode === 'week'
+      ? weekHtml(s, shown)
+      : shown.flatMap((pg) => pg.days).map((d) => dayHtml(s, d, s.days.indexOf(d))).join('');
+    return pagerHtml(pages) + body + (pages.length > 1 ? pagerHtml(pages) : '');
+  }
+
   // 暦の月〜金で1週間ずつ並べる。研修のない日は空き枠(ここへ日やコマをドラッグできる)
-  function weekHtml(s) {
+  function weekHtml(s, groups) {
     const hasWeekend = s.days.some((d) => { const w = parseDate(d.date).getDay(); return w === 0 || w === 6; });
     const cols = hasWeekend ? 7 : 5;
-    const mondayKey = (d) => { const dt = parseDate(d.date); return fmtDate(addDays(dt, -((dt.getDay() + 6) % 7))); };
-    const byWeek = new Map();
-    s.days.forEach((d) => { const k = mondayKey(d); if (!byWeek.has(k)) byWeek.set(k, []); byWeek.get(k).push(d); });
-    const keys = [...byWeek.keys()].sort();
-    let html = '';
-    for (let m = parseDate(keys[0]); fmtDate(m) <= keys[keys.length - 1]; m = addDays(m, 7)) {
-      const mon = fmtDate(m), range = `${jpDate(mon)} 〜 ${jpDate(fmtDate(addDays(m, cols - 1)))}`;
-      const days = byWeek.get(mon);
-      if (!days) { html += `<p class="week-skip">${range} は研修なし</p>`; continue; }
+    return groups.map(({ mon, days }) => {
+      const m = parseDate(mon), range = `${jpDate(mon)} 〜 ${jpDate(fmtDate(addDays(m, cols - 1)))}`;
       let cells = '';
       for (let c = 0; c < cols; c++) {
         const date = fmtDate(addDays(m, c)), here = days.filter((d) => d.date === date);
@@ -382,9 +431,8 @@
         }
       }
       const blocks = days.reduce((n, d) => n + d.blocks.length, 0);
-      html += `<section class="week"><h3 class="week-h">${range}<small>${days.length}日 / ${blocks}コマ</small></h3><div class="week-row" style="--cols:${cols}">${cells}</div></section>`;
-    }
-    return html;
+      return `<section class="week"><h3 class="week-h">${range}<small>${days.length}日 / ${blocks}コマ</small></h3><div class="week-row" style="--cols:${cols}">${cells}</div></section>`;
+    }).join('');
   }
 
   function blockHtml(d, b, bs, be, idx) {
@@ -539,6 +587,7 @@
     const cell = e.target.closest('[data-calday]');
     if (cell) {
       view = 'list';
+      if (!pageAll) { const i = pageOfDay(s, cell.dataset.calday); if (i >= 0) dayPage = i; }
       render();
       const el = document.querySelector(`[data-day="${cell.dataset.calday}"]`);
       if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'start' }); el.classList.add('flash'); setTimeout(() => el.classList.remove('flash'), 1600); }
@@ -681,7 +730,9 @@
   function addDay(s) {
     const last = s.days[s.days.length - 1];
     const date = last ? fmtDate(addBiz(parseDate(last.date), 1, s.skipHolidays)) : fmtDate(new Date());
-    s.days.push({ id: uid(), date, venue: last ? last.venue : '', start: s.defaultStart, section: '', blocks: [] });
+    const day = { id: uid(), date, venue: last ? last.venue : '', start: s.defaultStart, section: '', blocks: [] };
+    s.days.push(day);
+    return day;
   }
   function shiftDays(s, from, n) {
     for (let i = from; i < s.days.length; i++) s.days[i].date = fmtDate(addBiz(parseDate(s.days[i].date), n, s.skipHolidays));
@@ -702,6 +753,13 @@
     const day = dayEl && s.days.find((d) => d.id === dayEl.dataset.day);
     const blkEl = btn.closest('[data-block]');
     const act = btn.dataset.act;
+    if (act === 'pg-prev' || act === 'pg-next') {
+      pageAll = false;
+      dayPage += act === 'pg-next' ? 1 : -1;
+      render();
+      $('daysView').scrollIntoView({ block: 'start' });
+      return;
+    }
     if (act === 'week-add') {
       const last = s.days[s.days.length - 1];
       s.days.push({ id: uid(), date: btn.dataset.date, venue: last ? last.venue : '', start: s.defaultStart, section: '', blocks: [] });
@@ -746,6 +804,13 @@
 
   function onChange(e) {
     const t = e.target, s = cur();
+    if (t.matches('select[data-act="pg-sel"]')) {
+      pageAll = t.value === 'all';
+      if (!pageAll) dayPage = Number(t.value);
+      render();
+      $('daysView').scrollIntoView({ block: 'start' });
+      return;
+    }
     if (t.matches('select[data-act="to-day"]')) {
       if (!t.value) return;
       const id = t.closest('[data-block]').dataset.block;
@@ -1386,7 +1451,9 @@
 
     document.querySelectorAll('.tabs button').forEach((b) => b.addEventListener('click', () => { view = b.dataset.view; render(); }));
     $('colsSel').addEventListener('change', (e) => {
+      const keepDay = (listPages(cur())[dayPage] || { days: [] }).days[0];
       dayMode = e.target.value;
+      if (keepDay) { const i = pageOfDay(cur(), keepDay.id); if (i >= 0) dayPage = i; }
       try { localStorage.setItem('training-schedule-cols', dayMode); } catch (err) { /* 保存できなくても動く */ }
       render();
     });
@@ -1396,7 +1463,15 @@
     $('calWeekend').addEventListener('change', (e) => { calWeekend = e.target.checked; render(); });
     $('calFirst').addEventListener('click', () => { calFor = null; render(); });
     $('calView').addEventListener('click', onCalClick);
-    $('btnAddDay').addEventListener('click', () => { addDay(cur()); commit(); });
+    $('btnAddDay').addEventListener('click', () => {
+      const s = cur(), day = addDay(s);
+      view = 'list';
+      const i = pageOfDay(s, day.id);
+      if (i >= 0) { dayPage = i;   }
+      commit();
+      const el = document.querySelector(`[data-day="${day.id}"]`);
+      if (el) el.scrollIntoView({ block: 'nearest' });
+    });
     $('btnAddBacklog').addEventListener('click', () => openBlockDialog(null, 'backlog'));
     $('daysView').addEventListener('click', onClick);
     $('backlogList').addEventListener('click', onClick);

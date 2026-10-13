@@ -282,3 +282,10 @@ dialog select { display: block; width: 100%; margin-top: 3px; font-size: 14px; }
 .day.dragging { opacity: .4; }
 .day-grip { cursor: grab; color: var(--muted); user-select: none; padding: 0 2px; }
 .ro .day-grip, .ro .day-empty button { display: none; }
+
+/* ページ送り */
+.pager { display: flex; gap: 8px; align-items: center; margin: 0 0 12px; grid-column: 1 / -1; }
+.pager select { flex: 1; min-width: 0; padding: 5px 8px; }
+.pager:last-child { margin: 12px 0 0; }
+.pager button:disabled { opacity: .4; cursor: default; }
+@media print { .pager { display: none !important; } }
