@@ -86,8 +86,11 @@
   let view = 'list';      // list | month | year
   let calMonth = null;    // 表示中の月(その月の1日)
   let calFor = null;      // calMonth がどのスケジュール用か
-  let dayCols = 1;        // 日ごと表示で横に並べる日数(この端末だけの設定)
-  try { dayCols = Math.min(5, Math.max(1, parseInt(localStorage.getItem('training-schedule-cols'), 10) || 1)); } catch (e) { /* 既定値 */ }
+  let dayMode = '1';      // 日ごと表示の並べ方(この端末だけの設定): 1 = 縦に1日ずつ / 2 = 2日ずつ横に / week = 暦の月〜金で週ごとに
+  try {
+    const v = localStorage.getItem('training-schedule-cols');
+    dayMode = v === 'week' || v === '5' ? 'week' : ['2', '3', '4'].includes(v) ? '2' : '1';
+  } catch (e) { /* 既定値 */ }
 
   // ---------- 日付・時刻 ----------
   const pad = (n) => String(n).padStart(2, '0');
@@ -231,19 +234,19 @@
     const s = cur();
     renderTop(s);
     renderBanner(s);
-    $('daysView').innerHTML = s.days.length
-      ? s.days.map((d, i) => dayHtml(s, d, i)).join('')
-      : '<p class="empty">まだ日程がありません。「＋ 日を追加」か「取り込み」から始めてください。</p>';
+    $('daysView').innerHTML = !s.days.length
+      ? '<p class="empty">まだ日程がありません。「＋ 日を追加」か「取り込み」から始めてください。</p>'
+      : dayMode === 'week' ? weekHtml(s) : s.days.map((d, i) => dayHtml(s, d, i)).join('');
     $('backlogList').innerHTML = s.backlog.length
       ? s.backlog.map((b) => backlogHtml(s, b)).join('')
       : '<p class="hint">なし</p>';
     renderSummary(s);
     $('daysView').hidden = view !== 'list';
     $('colsWrap').hidden = view !== 'list';
-    $('colsSel').value = String(dayCols);
-    $('daysView').classList.toggle('grid', dayCols > 1);
-    $('daysView').style.setProperty('--cols', dayCols);
-    $('mainLayout').classList.toggle('wide', view === 'list' && dayCols >= 3);
+    $('colsSel').value = dayMode;
+    $('daysView').classList.toggle('grid', dayMode === '2');
+    $('daysView').style.setProperty('--cols', 2);
+    $('mainLayout').classList.toggle('wide', view === 'list' && dayMode === 'week');
     $('calView').hidden = view === 'list';
     $('calNav').hidden = view === 'list';
     $('mainLayout').classList.toggle('no-side', view === 'year');
@@ -324,8 +327,9 @@
     const sum = tl.length
       ? `${fmtMin(tl[0].s)}–${fmtMin(end)} / ${total}分${over ? ` ⚠ ${s.endLimit}を超過` : ''}`
       : 'コマなし';
-    return `<article class="day" data-day="${d.id}">
+    return `<article class="day" data-day="${d.id}" data-dragday="${d.id}" data-caldate="${esc(d.date)}">
       <div class="day-head">
+        <span class="day-grip" title="ドラッグで日付を移動(別の日とは入れ替え)">⋮⋮</span>
         <input type="date" data-f="date" value="${esc(d.date)}" aria-label="日付">
         <span class="dow dow-${dow}">(${DOW[dow]})</span>${HOLIDAY_NAMES[d.date] ? `<span class="hol-tag">${esc(HOLIDAY_NAMES[d.date])}</span>` : ''}
         <input class="section" data-f="section" value="${esc(d.section)}" placeholder="区分(例: 営業研修)" aria-label="区分">
@@ -352,6 +356,35 @@
       </div>
       <div class="day-foot"><button type="button" class="small" data-act="blk-add">＋ コマを追加</button></div>
     </article>`;
+  }
+
+  // 暦の月〜金で1週間ずつ並べる。研修のない日は空き枠(ここへ日やコマをドラッグできる)
+  function weekHtml(s) {
+    const hasWeekend = s.days.some((d) => { const w = parseDate(d.date).getDay(); return w === 0 || w === 6; });
+    const cols = hasWeekend ? 7 : 5;
+    const mondayKey = (d) => { const dt = parseDate(d.date); return fmtDate(addDays(dt, -((dt.getDay() + 6) % 7))); };
+    const byWeek = new Map();
+    s.days.forEach((d) => { const k = mondayKey(d); if (!byWeek.has(k)) byWeek.set(k, []); byWeek.get(k).push(d); });
+    const keys = [...byWeek.keys()].sort();
+    let html = '';
+    for (let m = parseDate(keys[0]); fmtDate(m) <= keys[keys.length - 1]; m = addDays(m, 7)) {
+      const mon = fmtDate(m), range = `${jpDate(mon)} 〜 ${jpDate(fmtDate(addDays(m, cols - 1)))}`;
+      const days = byWeek.get(mon);
+      if (!days) { html += `<p class="week-skip">${range} は研修なし</p>`; continue; }
+      let cells = '';
+      for (let c = 0; c < cols; c++) {
+        const date = fmtDate(addDays(m, c)), here = days.filter((d) => d.date === date);
+        if (here.length) cells += `<div class="week-cell">${here.map((d) => dayHtml(s, d, s.days.indexOf(d))).join('')}</div>`;
+        else {
+          const hol = HOLIDAY_NAMES[date];
+          cells += `<div class="day-empty" data-caldate="${date}"><b>${jpDate(date)}</b>${hol ? `<span class="hol-tag">${esc(hol)}</span>` : ''}<span>研修なし</span>
+            <button type="button" class="small" data-act="week-add" data-date="${date}">＋ この日に追加</button></div>`;
+        }
+      }
+      const blocks = days.reduce((n, d) => n + d.blocks.length, 0);
+      html += `<section class="week"><h3 class="week-h">${range}<small>${days.length}日 / ${blocks}コマ</small></h3><div class="week-row" style="--cols:${cols}">${cells}</div></section>`;
+    }
+    return html;
   }
 
   function blockHtml(d, b, bs, be, idx) {
@@ -669,6 +702,12 @@
     const day = dayEl && s.days.find((d) => d.id === dayEl.dataset.day);
     const blkEl = btn.closest('[data-block]');
     const act = btn.dataset.act;
+    if (act === 'week-add') {
+      const last = s.days[s.days.length - 1];
+      s.days.push({ id: uid(), date: btn.dataset.date, venue: last ? last.venue : '', start: s.defaultStart, section: '', blocks: [] });
+      sortDays(s);
+      return commit();
+    }
     if (act.startsWith('day-') && day) {
       const i = s.days.indexOf(day);
       snap({ 'day-shift': '日をずらす前', 'day-insert': '空白日を入れる前', 'day-up': '内容の入れ替え前', 'day-down': '内容の入れ替え前', 'day-dup': '日の複製前', 'day-del': '日の削除前' }[act]);
@@ -738,7 +777,7 @@
   // ---------- ドラッグ&ドロップ ----------
   let dragId = null, dragDay = null;
   function dropOnDate(key) {
-    const s = cur(), by = daysByDate(s);
+    const s = cur(), by = daysByDate([s]);
     snap('カレンダーで移動する前');
     if (dragDay) {
       const a = s.days.find((d) => d.id === dragDay), target = by.get(key);
@@ -768,6 +807,8 @@
   document.addEventListener('mousedown', (e) => {
     const g = e.target.closest && e.target.closest('.grip');
     if (g) g.closest('[data-block]').draggable = true;
+    const dg = e.target.closest && e.target.closest('.day-grip');
+    if (dg) dg.closest('[data-dragday]').draggable = true;
   });
   document.addEventListener('dragstart', (e) => {
     const cellEl = e.target.closest && e.target.closest('[data-calday]');
@@ -779,7 +820,16 @@
       return;
     }
     const el = e.target.closest && e.target.closest('[data-block]');
-    if (!el || !el.draggable) return;
+    if (!el || !el.draggable) {
+      const dayEl = e.target.closest && e.target.closest('[data-dragday]');
+      if (dayEl && dayEl.draggable) {
+        dragDay = dayEl.dataset.dragday;
+        e.dataTransfer.setData('text/plain', dragDay);
+        e.dataTransfer.effectAllowed = 'move';
+        dayEl.classList.add('dragging');
+      }
+      return;
+    }
     dragId = el.dataset.block;
     e.dataTransfer.setData('text/plain', dragId);
     e.dataTransfer.effectAllowed = 'move';
@@ -787,11 +837,12 @@
   });
   document.addEventListener('dragend', () => {
     dragId = null; dragDay = null;
-    document.querySelectorAll('[data-block]').forEach((el) => { el.draggable = false; });
+    document.querySelectorAll('[data-block], [data-dragday]').forEach((el) => { el.draggable = false; });
     clearDropMarks();
   });
   document.addEventListener('dragover', (e) => {
-    const cell = (dragId || dragDay) && e.target.closest && e.target.closest('[data-caldate]');
+    const inList = dragId && e.target.closest && e.target.closest('[data-drop]');
+    const cell = !inList && (dragId || dragDay) && e.target.closest && e.target.closest('[data-caldate]');
     if (cell) {
       e.preventDefault();
       document.querySelectorAll('.drop-target').forEach((el) => el.classList.remove('drop-target'));
@@ -807,7 +858,8 @@
     (kids[index] || box).classList.add(kids[index] ? 'insert-before' : 'insert-end');
   });
   document.addEventListener('drop', (e) => {
-    const cell = (dragId || dragDay) && e.target.closest && e.target.closest('[data-caldate]');
+    const inList = dragId && e.target.closest && e.target.closest('[data-drop]');
+    const cell = !inList && (dragId || dragDay) && e.target.closest && e.target.closest('[data-caldate]');
     if (cell) {
       e.preventDefault();
       dropOnDate(cell.dataset.caldate);
@@ -1334,8 +1386,8 @@
 
     document.querySelectorAll('.tabs button').forEach((b) => b.addEventListener('click', () => { view = b.dataset.view; render(); }));
     $('colsSel').addEventListener('change', (e) => {
-      dayCols = Number(e.target.value) || 1;
-      try { localStorage.setItem('training-schedule-cols', String(dayCols)); } catch (err) { /* 保存できなくても動く */ }
+      dayMode = e.target.value;
+      try { localStorage.setItem('training-schedule-cols', dayMode); } catch (err) { /* 保存できなくても動く */ }
       render();
     });
     $('calPrev').addEventListener('click', () => calNavigate(-1));

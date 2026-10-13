@@ -63,10 +63,11 @@
       <button type="button" data-view="month" aria-pressed="false">月カレンダー</button>
       <button type="button" data-view="year" aria-pressed="false">年間</button>
     </div>
-    <label id="colsWrap" class="cols-sel">横に並べる日数
-      <select id="colsSel" aria-label="横に並べる日数">
-        <option value="1">1日(縦に並べる)</option><option value="2">2日</option><option value="3">3日</option>
-        <option value="4">4日</option><option value="5">5日(1週間分)</option>
+    <label id="colsWrap" class="cols-sel">並べ方
+      <select id="colsSel" aria-label="日ごとの並べ方">
+        <option value="1">1日ずつ縦に</option>
+        <option value="2">2日ずつ横に</option>
+        <option value="week">週ごとに(暦の月〜金)</option>
       </select>
     </label>
     <div id="calNav" class="cal-nav" hidden>

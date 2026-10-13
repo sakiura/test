@@ -266,3 +266,19 @@ dialog select { display: block; width: 100%; margin-top: 3px; font-size: 14px; }
   .blk-actions { flex-wrap: wrap; }
   .day-foot { padding: 0 8px 8px; }
 }
+
+/* 週ごと(暦の月〜金) */
+.week { margin-bottom: 18px; }
+.week-h { margin: 0 0 8px; font-size: 14px; display: flex; gap: 10px; align-items: baseline; }
+.week-h small { color: var(--muted); font-weight: 400; }
+.week-row { display: grid; grid-template-columns: repeat(var(--cols, 5), minmax(0, 1fr)); gap: 12px; align-items: start; }
+.week-cell { min-width: 0; display: grid; gap: 12px; }
+.week-cell .day { margin-bottom: 0; }
+.week-skip { color: var(--muted); font-size: 12px; margin: 0 0 14px; }
+.day-empty { border: 1px dashed var(--line); border-radius: var(--radius); min-height: 96px; padding: 10px; display: flex; flex-direction: column;
+  align-items: flex-start; gap: 6px; color: var(--muted); font-size: 12px; }
+.day-empty b { color: var(--text); font-size: 13px; }
+.day-empty.drop-target, .day.drop-target { outline: 2px dashed var(--primary); outline-offset: -3px; }
+.day.dragging { opacity: .4; }
+.day-grip { cursor: grab; color: var(--muted); user-select: none; padding: 0 2px; }
+.ro .day-grip, .ro .day-empty button { display: none; }
