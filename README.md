@@ -24,7 +24,7 @@
 
 ## 共有(クレードを使わない方法): Googleスプレッドシート + Apps Script
 - 保存先は、あなたの Google ドライブのスプレッドシートです。**Google アカウントのない人も使えます**(URL と「合言葉」で入ります。編集用と閲覧用の2種類)。
-- 手順は [docs/共有のはじめかた.md](docs/共有のはじめかた.md) にあります。Apps Script に11ファイル(`apps-script/` の `Config.gs`・`Web.gs`・`Api.gs`・`Write.gs`・`Store.gs`・`Index.html`・`Style.html`・`Js1〜3.html`・`appsscript.json`)を貼って、ウェブアプリとして公開するだけです。
+- 手順は [docs/共有のはじめかた.md](docs/共有のはじめかた.md) にあります。Apps Script に12ファイル(`apps-script/` の `Config.gs`・`Web.gs`・`Api.gs`・`Write.gs`・`Store.gs`・`Index.html`・`Part_Style.gs`・`Part_Js1〜4.gs`・`appsscript.json`)を貼って、ウェブアプリとして公開するだけです。
 - Apps Script がアプリの画面も配るので、共有する URL は1つです。画面の「共有の設定」から、編集用・閲覧用の共有リンクをコピーして配れます。
 - 他の人の変更は15秒ごとに取りに行きます。同じ日を同時に編集した場合は、後から保存した内容になります。
 - `node tools/build_apps_script.js`(最初の1回だけ `cd tools && npm install`)で画面のファイル(`Index.html` など)を作り直せます。貼り付けやすいよう、圧縮してあります。サーバー側の確認は `node tools/test-gas.js`(Google に載せずに試せる模擬環境つき)です。

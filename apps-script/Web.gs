@@ -18,18 +18,25 @@ function doGet(e) {
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
 }
 
-// 画面は、Index(骨組み)・Style・Js1〜 のファイルに分けてある。[[PART:名前]] の場所に、そのファイルをはめ込む
+// 画面は、Index.html(骨組み)と、Part_Style.gs・Part_Js1.gs〜(見た目・動きの部品)に分けてある。
+// 骨組みの [[PART:名前]] の場所に、その部品をはめ込む
+function part_(name) {
+  var f = { Style: typeof part_Style === 'function' && part_Style, Js1: typeof part_Js1 === 'function' && part_Js1,
+            Js2: typeof part_Js2 === 'function' && part_Js2, Js3: typeof part_Js3 === 'function' && part_Js3,
+            Js4: typeof part_Js4 === 'function' && part_Js4, Js5: typeof part_Js5 === 'function' && part_Js5 }[name];
+  if (!f) throw new Error('部品がありません');
+  return f();
+}
+
 function page_() {
   function load(name) {
-    var t;
-    try { t = HtmlService.createHtmlOutputFromFile(name).getContent(); }
-    catch (err) { throw { title: '画面のファイル(' + name + ')が見つかりません', detail: 'Apps Script の左の「ファイル」に、名前が ' + name + ' の HTML ファイルがありますか?(「＋」→「HTML」で、名前を ' + name + ' にして作ります)(読み込み時のエラー: ' + String((err && err.message) || err).replace(/[<>&]/g, '') + ')' }; }
-    var mark = '[[END-OF-' + name + ']]';
+    var t, isHtml = name === 'Index', file = isHtml ? 'HTML ファイル「' + name + '」' : 'スクリプト「Part_' + name + '」';
+    try { t = isHtml ? HtmlService.createHtmlOutputFromFile(name).getContent() : part_(name); }
+    catch (err) { throw { title: '画面のファイル(' + name + ')が見つかりません', detail: file + ' がありますか?(読み込み時のエラー: ' + String((err && err.message) || err).replace(/[<>&]/g, '').slice(0, 200) + ')' }; }
+    var mark = '\n[[END-OF-' + name + ']]';
     var at = t.lastIndexOf(mark);
-    if (at < 0) throw { title: '画面のファイル(' + name + ')が最後まで貼り付けられていません', detail: '今は ' + t.length + ' 文字しか入っていません。末尾は「' + t.slice(-30).replace(/[<>&]/g, '') + '」です。' + name + ' の中身をすべて消して、' + name + '.html の全文をコピーし直して貼り付けてください。貼り付けたあと、末尾が ' + mark + ' で終わっていれば全部入っています。' };
-    t = t.slice(0, at);
-    // プログラムの部分は <script>〜</script> で包んで保存してある(HTML として検査を通すため)。包みを外す
-    return /^<script>[\s\S]*<\/script>\s*$/.test(t) ? t.replace(/^<script>/, '').replace(/<\/script>\s*$/, '') : t;
+    if (at < 0) throw { title: '画面のファイル(' + name + ')が最後まで貼り付けられていません', detail: '今は ' + t.length + ' 文字しか入っていません。末尾は「' + t.slice(-30).replace(/[<>&]/g, '') + '」です。' + file + ' の中身をすべて消して、貼り直してください。' };
+    return t.slice(0, at);
   }
   var html = load('Index');
   html = html.replace(/\[\[PART:(\w+)\]\]/g, function (m, name) { return load(name); });

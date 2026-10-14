@@ -133,25 +133,24 @@ const gw = createGas({ execUrl: 'https://script.google.com/a/macros/example.co.j
 gw.ctx.setup();
 assert(gw.get({}).html.includes('"execUrl":"https://script.google.com/macros/s/ABC/exec"'), 'Workspace のアドレスを /macros/ の形に直す');
 // 画面のファイルが見つからない・途中で切れているときは、画面で知らせる
-const parts = fs.readdirSync(path.join(__dirname, '..', 'apps-script')).filter((f) => /\.html$/.test(f)).map((f) => f.replace('.html', ''));
-assert(parts.includes('Index') && parts.includes('Style') && parts.includes('Js1'), '画面のファイルが揃っている');
-parts.forEach((n) => {
-  const t = fs.readFileSync(path.join(__dirname, '..', 'apps-script', n + '.html'), 'utf8');
-  assert(t.length <= 30000, n + ' は30,000文字以内(' + t.length + ')');
-  assert(t.endsWith('\n[[END-OF-' + n + ']]\n'), n + ' の末尾に目印がある');
+const dir = path.join(__dirname, '..', 'apps-script');
+const names = fs.readdirSync(dir).filter((f) => /^(Index\.html|Part_\w+\.gs)$/.test(f));
+assert(names.includes('Index.html') && names.includes('Part_Style.gs') && names.includes('Part_Js1.gs'), '画面のファイルが揃っている');
+names.forEach((f) => {
+  const t = fs.readFileSync(path.join(dir, f), 'utf8'), n = f.replace(/^Part_/, '').replace(/\.\w+$/, '');
+  assert(t.length <= 30000, f + ' は30,000文字以内(' + t.length + ')');
+  assert(t.includes('[[END-OF-' + n + ']]'), f + ' に末尾の目印がある');
+  // Apps Script は HTML ファイルを HTML として検査する。プログラム・CSS は .gs の文字列に入れる(HTML 側には < を含むものを置かない)
+  if (f.endsWith('.gs')) assert(t.split('\n').length <= 4 && /^\/\/.*\nfunction part_\w+\(\) \{ return ".*"; \}\n$/s.test(t), f + ' は1行の文字列の関数');
 });
 const full = createGas({}).get({}).html;
 assert(full.includes('<style>') && full.includes('window.__GAS__') && !full.includes('[[PART:') && !full.includes('END-OF-'), '部品がつながる');
-const jsAll = full.slice(full.lastIndexOf('<script>') + 8, full.lastIndexOf('</script>'));
-new vm.Script(jsAll);   // つないだ JS が、構文として正しい
-assert(createGas({ files: { Js2: null } }).get({}).html.includes('Js2)が見つかりません'), '部品がないときの案内');
-// Apps Script は HTML ファイルを HTML として検査するので、JS 部品は <script> で包まれ、中に </script> や <!-- がないこと
-['Js1', 'Js2', 'Js3'].forEach((n) => {
-  const t = fs.readFileSync(path.join(__dirname, '..', 'apps-script', n + '.html'), 'utf8');
-  assert(t.startsWith('<script>') && t.includes('</script>\n[[END-OF-' + n + ']]'), n + ' は <script> で包まれている');
-  assert(t.indexOf('</script>') === t.lastIndexOf('</script>') && !t.includes('<!--'), n + ' の中に </script> や <!-- がない');
-});
-const half = fs.readFileSync(path.join(__dirname, '..', 'apps-script', 'Js1.html'), 'utf8').slice(0, 5000);
-const cutPage = createGas({ files: { Js1: half } }).get({}).html;
+new vm.Script(full.slice(full.lastIndexOf('<script>') + 8, full.lastIndexOf('</script>')));   // つないだ JS が、構文として正しい
+const miss = createGas({}); miss.ctx.part_Js2 = undefined;
+assert(miss.get({}).html.includes('Js2)が見つかりません'), '部品がないときの案内');
+const cutG = createGas({}); cutG.ctx.part_Js1 = () => 'x'.repeat(5000);
+const cutPage = cutG.get({}).html;
 assert(cutPage.includes('Js1)が最後まで貼り付けられていません') && cutPage.includes('5000 文字しか入っていません'), '途中で切れているときの案内');
+const noIdx = createGas({ files: { Index: null } });
+assert(noIdx.get({}).html.includes('Index)が見つかりません'), 'Index がないときの案内');
 console.log('Apps Script: すべて通りました');

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * index.html / style.css / sync-sheet.js / app.js を 1 つにまとめて、
- * Apps Script に貼り付ける apps-script/Index.html・Style.html・Js1.html〜 を作る。
+ * Apps Script に貼り付ける apps-script/Index.html と Part_*.gs を作る。
  *
  *   cd tools && npm install     (最初の1回だけ。terser を入れる)
  *   node tools/build_apps_script.js
@@ -35,23 +35,26 @@ async function main() {
     .trim();
   const small = body.replace(/\s+/g, ' ').trim();
 
-  // 1ファイルを小さく保つため、画面を「骨組み(Index)・見た目(Style)・動き(Js1〜)」に分ける。
-  // 動きの部分は、1つの <script> にするため、決まった長さで機械的に切って、Web.gs がつなぎ直す。
-  const SIZE = 24000;
+  // 1ファイルを小さく保つため、画面を「骨組み(Index.html)」と、見た目・動きの部品(.gs)に分ける。
+  // Apps Script は HTML ファイルを HTML として検査し、プログラムの中の < を拒否することがあるため、
+  // 見た目と動きは .gs の文字列として持たせる。動きの部分は、決まった長さで機械的に切って、Web.gs がつなぎ直す。
+  const SIZE = 20000;
   const jsParts = [];
   for (let i = 0; i < min.code.length; i += SIZE) jsParts.push(min.code.slice(i, i + SIZE));
   const names = jsParts.map((_, i) => 'Js' + (i + 1));
   const end = (n) => '\n[[END-OF-' + n + ']]\n';
   const outDir = path.join(root, 'apps-script');
-  fs.readdirSync(outDir).filter((f) => /^(Index|Style|Js\d+)\.html$/.test(f)).forEach((f) => fs.unlinkSync(path.join(outDir, f)));
+  fs.readdirSync(outDir).filter((f) => /^(Index|Style|Js\d+|Part_\w+)\.(html|gs)$/.test(f)).forEach((f) => fs.unlinkSync(path.join(outDir, f)));
   const files = {
-    Index: '<!DOCTYPE html>\n<html lang="ja">\n<head>\n<meta charset="utf-8">\n<title>研修スケジュール管理</title>\n[[PART:Style]]\n</head>\n<body>\n' +
+    'Index.html': '<!DOCTYPE html>\n<html lang="ja">\n<head>\n<meta charset="utf-8">\n<title>研修スケジュール管理</title>\n[[PART:Style]]\n</head>\n<body>\n' +
       small + '\n' + marker + '\n<script>' + names.map((n) => '[[PART:' + n + ']]').join('') + '</script>\n</body>\n</html>' + end('Index'),
-    Style: '<style>' + css + '</style>' + end('Style'),
   };
-  // Apps Script は HTML ファイルを HTML として検査する(中の < を、タグと勘違いして拒否する)ため、<script> で包む。Web.gs が包みを外してつなぐ
-  names.forEach((n, i) => { files[n] = '<script>' + jsParts[i] + '</script>' + end(n); });
-  Object.keys(files).forEach((n) => fs.writeFileSync(path.join(outDir, n + '.html'), files[n]));
-  console.log('作りました: ' + Object.keys(files).map((n) => n + '.html(' + files[n].length.toLocaleString() + '文字)').join(' / '));
+  const parts = { Style: '<style>' + css + '</style>' };
+  names.forEach((n, i) => { parts[n] = jsParts[i]; });
+  Object.keys(parts).forEach((n) => {
+    files['Part_' + n + '.gs'] = '// 画面の部品(' + n + ')。中身は1行の文字列です。末尾の [[END-OF-' + n + ']] まで入っていれば全部です。\nfunction part_' + n + '() { return ' + JSON.stringify(parts[n] + end(n)) + '; }\n';
+  });
+  Object.keys(files).forEach((n) => fs.writeFileSync(path.join(outDir, n), files[n]));
+  console.log('作りました: ' + Object.keys(files).map((n) => n + '(' + files[n].length.toLocaleString() + '文字)').join(' / '));
 }
 main().catch((e) => { console.error(e); process.exit(1); });
