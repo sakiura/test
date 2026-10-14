@@ -138,10 +138,10 @@ assert(parts.includes('Index') && parts.includes('Style') && parts.includes('Js1
 parts.forEach((n) => {
   const t = fs.readFileSync(path.join(__dirname, '..', 'apps-script', n + '.html'), 'utf8');
   assert(t.length <= 30000, n + ' は30,000文字以内(' + t.length + ')');
-  assert(t.endsWith('\n<!--END-OF-' + n + '-->\n'), n + ' の末尾に目印がある');
+  assert(t.endsWith('\n[[END-OF-' + n + ']]\n'), n + ' の末尾に目印がある');
 });
 const full = createGas({}).get({}).html;
-assert(full.includes('<style>') && full.includes('window.__GAS__') && !full.includes('<!--PART:') && !full.includes('END-OF-'), '部品がつながる');
+assert(full.includes('<style>') && full.includes('window.__GAS__') && !full.includes('[[PART:') && !full.includes('END-OF-'), '部品がつながる');
 const jsAll = full.slice(full.lastIndexOf('<script>') + 8, full.lastIndexOf('</script>'));
 new vm.Script(jsAll);   // つないだ JS が、構文として正しい
 assert(createGas({ files: { Js2: null } }).get({}).html.includes('Js2)が見つかりません'), '部品がないときの案内');
