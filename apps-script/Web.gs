@@ -23,7 +23,7 @@ function page_() {
   function load(name) {
     var t;
     try { t = HtmlService.createHtmlOutputFromFile(name).getContent(); }
-    catch (err) { throw { title: '画面のファイル(' + name + ')が見つかりません', detail: 'Apps Script の左の「ファイル」に、名前が ' + name + ' の HTML ファイルがありますか?(「＋」→「HTML」で、名前を ' + name + ' にして作ります)' }; }
+    catch (err) { throw { title: '画面のファイル(' + name + ')が見つかりません', detail: 'Apps Script の左の「ファイル」に、名前が ' + name + ' の HTML ファイルがありますか?(「＋」→「HTML」で、名前を ' + name + ' にして作ります)(読み込み時のエラー: ' + String((err && err.message) || err).replace(/[<>&]/g, '') + ')' }; }
     var mark = '[[END-OF-' + name + ']]';
     var at = t.lastIndexOf(mark);
     if (at < 0) throw { title: '画面のファイル(' + name + ')が最後まで貼り付けられていません', detail: '今は ' + t.length + ' 文字しか入っていません。末尾は「' + t.slice(-30).replace(/[<>&]/g, '') + '」です。' + name + ' の中身をすべて消して、' + name + '.html の全文をコピーし直して貼り付けてください。貼り付けたあと、末尾が ' + mark + ' で終わっていれば全部入っています。' };
