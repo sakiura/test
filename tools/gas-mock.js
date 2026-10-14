@@ -50,7 +50,7 @@ function createGas(opts = {}) {
     ContentService: { MimeType: { JSON: 'json' }, createTextOutput: (s) => ({ getContent: () => s, setMimeType() { return this; } }) },
     Utilities: { getUuid: () => require('crypto').randomUUID() },
     Logger: { log: (m) => logs.push(m) },
-    HtmlService: { createHtmlOutputFromFile: () => ({ getContent: () => '<html><!--SHARE-CONFIG--></html>' }),
+    HtmlService: { createHtmlOutputFromFile: () => { if (opts.noIndex) throw new Error('Index'); return { getContent: () => (opts.indexHtml !== undefined ? opts.indexHtml : '<html><!--SHARE-CONFIG--></html>\n<!--END-OF-INDEX-->') }; },
       createHtmlOutput: (h) => ({ html: h, setTitle() { return this; }, addMetaTag() { return this; }, setXFrameOptionsMode() { return this; } }), XFrameOptionsMode: { ALLOWALL: 1 } },
     ScriptApp: { getService: () => ({ getUrl: () => opts.execUrl || 'https://script.google.com/macros/s/TEST/exec' }) },
     Date: class extends Date { static now() { return clock(); } },

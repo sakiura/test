@@ -123,4 +123,10 @@ assert.strictEqual(g.api({ action: 'ping', key: V }).error, 'auth', '古い合�
 const gw = createGas({ execUrl: 'https://script.google.com/a/macros/example.co.jp/s/ABC/exec' });
 gw.ctx.setup();
 assert(gw.get({}).html.includes('"execUrl":"https://script.google.com/macros/s/ABC/exec"'), 'Workspace のアドレスを /macros/ の形に直す');
+// Index.html が見つからない・途中で切れているときは、画面で知らせる
+assert(createGas({ noIndex: true }).get({}).html.includes('見つかりません'), 'Index がないときの案内');
+const cut = createGas({ indexHtml: '<html><!--SHARE-CONFIG--><script>abc' });
+cut.ctx.setup();
+const cutPage = cut.get({}).html;
+assert(cutPage.includes('最後まで貼り付けられていません') && cutPage.includes('文字しか入っていません'), '途中で切れているときの案内');
 console.log('Code.gs: すべて通りました');

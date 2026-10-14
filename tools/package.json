@@ -1,0 +1,6 @@
+{
+  "name": "training-schedule-tools",
+  "private": true,
+  "description": "Apps Script に貼り付ける Index.html の組み立て用(圧縮に terser を使う)",
+  "devDependencies": { "terser": "5.31.6" }
+}

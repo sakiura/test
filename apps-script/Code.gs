@@ -17,6 +17,7 @@ var CHUNK = 40000;                     // 1セルの上限(5万文字)を超え�
 var MAX_CHUNKS = 12;
 var SETTINGS = '設定';
 var DELETED = '_deleted';
+var INDEX_END = '<!--END-OF-INDEX-->';   // Index.html の最後の目印
 var PATH_RE = /^(schedules|days|backlogs|meta|history)\/[A-Za-z0-9_\-.~:@+]{1,200}$/;
 
 // ---------- 入口 ----------
@@ -25,7 +26,13 @@ var PATH_RE = /^(schedules|days|backlogs|meta|history)\/[A-Za-z0-9_\-.~:@+]{1,20
 function doGet(e) {
   var p = (e && e.parameter) || {};
   if (p.action) return json_(handle_(p));
-  var html = HtmlService.createHtmlOutputFromFile('Index').getContent();
+  var html;
+  try { html = HtmlService.createHtmlOutputFromFile('Index').getContent(); }
+  catch (err) { return notice_('画面のファイルが見つかりません', 'Apps Script の左の「ファイル」に、名前が Index の HTML ファイルがありますか?(「＋」→「HTML」で、名前を Index にして作ります)'); }
+  // 貼り付けが途中で切れていないか確かめる(末尾の目印がなければ、切れている)
+  if (html.indexOf(INDEX_END) < 0 || html.indexOf('<!--SHARE-CONFIG-->') < 0) {
+    return notice_('画面のファイル(Index)が最後まで貼り付けられていません', '今は ' + html.length + ' 文字しか入っていません(全体は約96,000文字です)。Index の中身をすべて消して、Index.html の全文をコピーし直して貼り付けてください。貼り付けたあと、末尾が &lt;!--END-OF-INDEX--&gt; で終わっていれば全部入っています。');
+  }
   // Google Workspace で公開すると、アドレスが /a/macros/ドメイン/ の形になる。これだとログインを求められる
   // ことがあるので、Google アカウントのない人にも配れる /macros/ の形に直して、共有リンクに使う。
   var execUrl = String(ScriptApp.getService().getUrl()).replace(/\/a\/macros\/[^\/]+\//, '/macros/');
@@ -35,6 +42,13 @@ function doGet(e) {
     .setTitle('研修スケジュール管理')
     .addMetaTag('viewport', 'width=device-width, initial-scale=1')
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+}
+
+// 設定の不備を、画面に分かりやすく出す
+function notice_(title, detail) {
+  return HtmlService.createHtmlOutput('<div style="font:16px/1.6 sans-serif;max-width:640px;margin:48px auto;padding:0 20px"><h2>' + title + '</h2><p>' + detail + '</p></div>')
+    .setTitle('研修スケジュール管理')
+    .addMetaTag('viewport', 'width=device-width, initial-scale=1');
 }
 
 // 他の場所に置いたページからの呼び出し(Content-Type: text/plain の JSON)

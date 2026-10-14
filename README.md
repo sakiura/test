@@ -27,7 +27,7 @@
 - 手順は [docs/共有のはじめかた.md](docs/共有のはじめかた.md) にあります。Apps Script に3ファイル(`apps-script/Code.gs`・`Index.html`・`appsscript.json`)を貼って、ウェブアプリとして公開するだけです。
 - Apps Script がアプリの画面も配るので、共有する URL は1つです。画面の「共有の設定」から、編集用・閲覧用の共有リンクをコピーして配れます。
 - 他の人の変更は15秒ごとに取りに行きます。同じ日を同時に編集した場合は、後から保存した内容になります。
-- `python3 tools/build_apps_script.py` で `apps-script/Index.html` を作り直せます。サーバー側の確認は `node tools/test-gas.js`(Google に載せずに試せる模擬環境つき)です。
+- `node tools/build_apps_script.js`(最初の1回だけ `cd tools && npm install`)で `apps-script/Index.html` を作り直せます。貼り付けやすいよう、圧縮してあります。サーバー側の確認は `node tools/test-gas.js`(Google に載せずに試せる模擬環境つき)です。
 
 ## 共有(claude.ai で公開する方法)
 - claude.ai に公開したページとして開くと、共有データベースに保存され、開いている全員が同じ内容を見られます。他の人の変更は自動で反映されます(日ごとに保存するので、別の日を同時に編集しても衝突しません。同じ日を同時に編集した場合は、後から保存した内容になります)。
