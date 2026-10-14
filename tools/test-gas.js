@@ -1,4 +1,12 @@
-// node tools/test-gas.js  — Apps Script 側(Code.gs)の動作を、模擬環境で確認する
+// node tools/test-gas.js  — Apps Script 側(apps-script/*.gs)の動作を、模擬環境で確認する
+// 各ファイルが単独で構文として正しいことも確かめる(貼り付けが途中で切れたら、そのファイルだけ壊れるため)
+for (const f of require('fs').readdirSync(require('path').join(__dirname, '..', 'apps-script')).filter((x) => x.endsWith('.gs'))) {
+  const src = require('fs').readFileSync(require('path').join(__dirname, '..', 'apps-script', f), 'utf8');
+  new Function(src);
+  const n = src.split('\n').length - 1;
+  if (n > 80) throw new Error(f + ' が長すぎます(' + n + '行)。80行以内に分けてください');
+  console.log('  ' + f + ': ' + n + '行 OK');
+}
 const assert = require('assert');
 const { createGas } = require('./gas-mock');
 
@@ -129,4 +137,4 @@ const cut = createGas({ indexHtml: '<html><!--SHARE-CONFIG--><script>abc' });
 cut.ctx.setup();
 const cutPage = cut.get({}).html;
 assert(cutPage.includes('最後まで貼り付けられていません') && cutPage.includes('文字しか入っていません'), '途中で切れているときの案内');
-console.log('Code.gs: すべて通りました');
+console.log('Apps Script: すべて通りました');

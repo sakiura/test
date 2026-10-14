@@ -57,7 +57,11 @@ function createGas(opts = {}) {
     JSON, Number, String, Array, Object, Error, Math, RegExp,
   };
   vm.createContext(ctx);
-  vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'apps-script', 'Code.gs'), 'utf8'), ctx, { filename: 'Code.gs' });
+  // Apps Script は、プロジェクト内の .gs をすべて同じ場所で読み込む(貼り付けやすいよう、小さなファイルに分けてある)
+  const dir = path.join(__dirname, '..', 'apps-script');
+  fs.readdirSync(dir).filter((f) => f.endsWith('.gs')).sort().forEach((f) => {
+    vm.runInContext(fs.readFileSync(path.join(dir, f), 'utf8'), ctx, { filename: f });
+  });
   return {
     ctx, sheets, logs,
     setClock: (f) => { clock = f; },
