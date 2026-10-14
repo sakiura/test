@@ -41,10 +41,12 @@ async function main() {
   // プログラムが止まったとき、原因を画面の一番上に出す(原因を調べやすくするため)
   const guard = '<script>(function(){function show(m){var d=document.createElement("pre");d.style.cssText="background:#fee;color:#900;padding:8px;margin:0;white-space:pre-wrap;font-size:12px";d.textContent="プログラムが止まりました: "+m;document.body.insertBefore(d,document.body.firstChild);}' +
     'window.addEventListener("error",function(e){show(e.message+" (行 "+e.lineno+" 列 "+e.colno+")");});' +
+    'setTimeout(function(){if(!window.__APP_STARTED)show("プログラムが読み込まれていません(SheetDB="+typeof window.SheetDB+")");},4000);' +
     'window.addEventListener("unhandledrejection",function(e){show(String(e.reason&&e.reason.stack||e.reason));});})();</script>';
   const SIZE = 20000;
+  const code = min.code + '\n;window.__APP_STARTED=1;\n';   // 最後まで読み込めたかの目印(guard が確かめる)
   const jsParts = [];
-  for (let i = 0; i < min.code.length; i += SIZE) jsParts.push(min.code.slice(i, i + SIZE));
+  for (let i = 0; i < code.length; i += SIZE) jsParts.push(code.slice(i, i + SIZE));
   const names = jsParts.map((_, i) => 'Js' + (i + 1));
   const end = (n) => '\n[[END-OF-' + n + ']]\n';
   const outDir = path.join(root, 'apps-script');
