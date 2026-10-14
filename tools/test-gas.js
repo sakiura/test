@@ -119,4 +119,8 @@ g.ctx.CacheService.getScriptCache().put('keys', '', 0);
 g.ctx.CacheService.getScriptCache = () => ({ get: () => null, put() {} });
 assert.strictEqual(g.api({ action: 'ping', key: 'newviewkey' }).role, 'view');
 assert.strictEqual(g.api({ action: 'ping', key: V }).error, 'auth', '古い合言葉は使えなくなる');
+// Google Workspace の /a/macros/ドメイン/ の形のアドレスは、共有リンクでは /macros/ の形に直す
+const gw = createGas({ execUrl: 'https://script.google.com/a/macros/example.co.jp/s/ABC/exec' });
+gw.ctx.setup();
+assert(gw.get({}).html.includes('"execUrl":"https://script.google.com/macros/s/ABC/exec"'), 'Workspace のアドレスを /macros/ の形に直す');
 console.log('Code.gs: すべて通りました');

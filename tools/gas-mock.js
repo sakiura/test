@@ -52,7 +52,7 @@ function createGas(opts = {}) {
     Logger: { log: (m) => logs.push(m) },
     HtmlService: { createHtmlOutputFromFile: () => ({ getContent: () => '<html><!--SHARE-CONFIG--></html>' }),
       createHtmlOutput: (h) => ({ html: h, setTitle() { return this; }, addMetaTag() { return this; }, setXFrameOptionsMode() { return this; } }), XFrameOptionsMode: { ALLOWALL: 1 } },
-    ScriptApp: { getService: () => ({ getUrl: () => 'https://script.google.com/macros/s/TEST/exec' }) },
+    ScriptApp: { getService: () => ({ getUrl: () => opts.execUrl || 'https://script.google.com/macros/s/TEST/exec' }) },
     Date: class extends Date { static now() { return clock(); } },
     JSON, Number, String, Array, Object, Error, Math, RegExp,
   };

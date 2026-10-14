@@ -26,7 +26,10 @@ function doGet(e) {
   var p = (e && e.parameter) || {};
   if (p.action) return json_(handle_(p));
   var html = HtmlService.createHtmlOutputFromFile('Index').getContent();
-  var cfg = { gas: true, execUrl: ScriptApp.getService().getUrl(), key: p.key || '' };
+  // Google Workspace で公開すると、アドレスが /a/macros/ドメイン/ の形になる。これだとログインを求められる
+  // ことがあるので、Google アカウントのない人にも配れる /macros/ の形に直して、共有リンクに使う。
+  var execUrl = String(ScriptApp.getService().getUrl()).replace(/\/a\/macros\/[^\/]+\//, '/macros/');
+  var cfg = { gas: true, execUrl: execUrl, key: p.key || '' };
   html = html.replace('<!--SHARE-CONFIG-->', '<script>window.__GAS__=' + JSON.stringify(cfg).replace(/</g, '\\u003c') + ';</script>');
   return HtmlService.createHtmlOutput(html)
     .setTitle('研修スケジュール管理')
