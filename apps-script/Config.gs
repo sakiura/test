@@ -17,7 +17,6 @@ var CHUNK = 40000;                     // 1セルの上限(5万文字)を超え�
 var MAX_CHUNKS = 12;
 var SETTINGS = '設定';
 var DELETED = '_deleted';
-var INDEX_END = '<!--END-OF-INDEX-->';   // Index.html の最後の目印
 var PATH_RE = /^(schedules|days|backlogs|meta|history)\/[A-Za-z0-9_\-.~:@+]{1,200}$/;
 
 // ---------- 合言葉 ----------

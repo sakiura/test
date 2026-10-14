@@ -5,12 +5,8 @@ function doGet(e) {
   var p = (e && e.parameter) || {};
   if (p.action) return json_(handle_(p));
   var html;
-  try { html = HtmlService.createHtmlOutputFromFile('Index').getContent(); }
-  catch (err) { return notice_('画面のファイルが見つかりません', 'Apps Script の左の「ファイル」に、名前が Index の HTML ファイルがありますか?(「＋」→「HTML」で、名前を Index にして作ります)'); }
-  // 貼り付けが途中で切れていないか確かめる(末尾の目印がなければ、切れている)
-  if (html.indexOf(INDEX_END) < 0 || html.indexOf('<!--SHARE-CONFIG-->') < 0) {
-    return notice_('画面のファイル(Index)が最後まで貼り付けられていません', '今は ' + html.length + ' 文字しか入っていません(全体は約96,000文字です)。Index の中身をすべて消して、Index.html の全文をコピーし直して貼り付けてください。貼り付けたあと、末尾が &lt;!--END-OF-INDEX--&gt; で終わっていれば全部入っています。');
-  }
+  try { html = page_(); }
+  catch (err) { return notice_(err.title, err.detail); }
   // Google Workspace で公開すると、アドレスが /a/macros/ドメイン/ の形になる。これだとログインを求められる
   // ことがあるので、Google アカウントのない人にも配れる /macros/ の形に直して、共有リンクに使う。
   var execUrl = String(ScriptApp.getService().getUrl()).replace(/\/a\/macros\/[^\/]+\//, '/macros/');
@@ -20,6 +16,23 @@ function doGet(e) {
     .setTitle('研修スケジュール管理')
     .addMetaTag('viewport', 'width=device-width, initial-scale=1')
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+}
+
+// 画面は、Index(骨組み)・Style・Js1〜 のファイルに分けてある。<!--PART:名前--> の場所に、そのファイルをはめ込む
+function page_() {
+  function load(name) {
+    var t;
+    try { t = HtmlService.createHtmlOutputFromFile(name).getContent(); }
+    catch (err) { throw { title: '画面のファイル(' + name + ')が見つかりません', detail: 'Apps Script の左の「ファイル」に、名前が ' + name + ' の HTML ファイルがありますか?(「＋」→「HTML」で、名前を ' + name + ' にして作ります)' }; }
+    var mark = '\n<!--END-OF-' + name + '-->';
+    var at = t.lastIndexOf(mark);
+    if (at < 0) throw { title: '画面のファイル(' + name + ')が最後まで貼り付けられていません', detail: '今は ' + t.length + ' 文字しか入っていません。' + name + ' の中身をすべて消して、' + name + '.html の全文をコピーし直して貼り付けてください。貼り付けたあと、末尾が &lt;!--END-OF-' + name + '--&gt; で終わっていれば全部入っています。' };
+    return t.slice(0, at);
+  }
+  var html = load('Index');
+  html = html.replace(/<!--PART:(\w+)-->/g, function (m, name) { return load(name); });
+  if (html.indexOf('<!--SHARE-CONFIG-->') < 0) throw { title: '画面のファイル(Index)が正しくありません', detail: 'Index の中身をすべて消して、Index.html の全文をコピーし直して貼り付けてください。' };
+  return html;
 }
 
 // 設定の不備を、画面に分かりやすく出す

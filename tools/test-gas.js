@@ -7,6 +7,7 @@ for (const f of require('fs').readdirSync(require('path').join(__dirname, '..', 
   if (n > 80) throw new Error(f + ' が長すぎます(' + n + '行)。80行以内に分けてください');
   console.log('  ' + f + ': ' + n + '行 OK');
 }
+const fs = require('fs'), path = require('path'), vm = require('vm');
 const assert = require('assert');
 const { createGas } = require('./gas-mock');
 
@@ -131,10 +132,20 @@ assert.strictEqual(g.api({ action: 'ping', key: V }).error, 'auth', '古い合�
 const gw = createGas({ execUrl: 'https://script.google.com/a/macros/example.co.jp/s/ABC/exec' });
 gw.ctx.setup();
 assert(gw.get({}).html.includes('"execUrl":"https://script.google.com/macros/s/ABC/exec"'), 'Workspace のアドレスを /macros/ の形に直す');
-// Index.html が見つからない・途中で切れているときは、画面で知らせる
-assert(createGas({ noIndex: true }).get({}).html.includes('見つかりません'), 'Index がないときの案内');
-const cut = createGas({ indexHtml: '<html><!--SHARE-CONFIG--><script>abc' });
-cut.ctx.setup();
-const cutPage = cut.get({}).html;
-assert(cutPage.includes('最後まで貼り付けられていません') && cutPage.includes('文字しか入っていません'), '途中で切れているときの案内');
+// 画面のファイルが見つからない・途中で切れているときは、画面で知らせる
+const parts = fs.readdirSync(path.join(__dirname, '..', 'apps-script')).filter((f) => /\.html$/.test(f)).map((f) => f.replace('.html', ''));
+assert(parts.includes('Index') && parts.includes('Style') && parts.includes('Js1'), '画面のファイルが揃っている');
+parts.forEach((n) => {
+  const t = fs.readFileSync(path.join(__dirname, '..', 'apps-script', n + '.html'), 'utf8');
+  assert(t.length <= 30000, n + ' は30,000文字以内(' + t.length + ')');
+  assert(t.endsWith('\n<!--END-OF-' + n + '-->\n'), n + ' の末尾に目印がある');
+});
+const full = createGas({}).get({}).html;
+assert(full.includes('<style>') && full.includes('window.__GAS__') && !full.includes('<!--PART:') && !full.includes('END-OF-'), '部品がつながる');
+const jsAll = full.slice(full.lastIndexOf('<script>') + 8, full.lastIndexOf('</script>'));
+new vm.Script(jsAll);   // つないだ JS が、構文として正しい
+assert(createGas({ files: { Js2: null } }).get({}).html.includes('Js2)が見つかりません'), '部品がないときの案内');
+const half = fs.readFileSync(path.join(__dirname, '..', 'apps-script', 'Js1.html'), 'utf8').slice(0, 5000);
+const cutPage = createGas({ files: { Js1: half } }).get({}).html;
+assert(cutPage.includes('Js1)が最後まで貼り付けられていません') && cutPage.includes('5000 文字しか入っていません'), '途中で切れているときの案内');
 console.log('Apps Script: すべて通りました');
