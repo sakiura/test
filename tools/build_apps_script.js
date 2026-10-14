@@ -38,6 +38,10 @@ async function main() {
   // 1ファイルを小さく保つため、画面を「骨組み(Index.html)」と、見た目・動きの部品(.gs)に分ける。
   // Apps Script は HTML ファイルを HTML として検査し、プログラムの中の < を拒否することがあるため、
   // 見た目と動きは .gs の文字列として持たせる。動きの部分は、決まった長さで機械的に切って、Web.gs がつなぎ直す。
+  // プログラムが止まったとき、原因を画面の一番上に出す(原因を調べやすくするため)
+  const guard = '<script>(function(){function show(m){var d=document.createElement("pre");d.style.cssText="background:#fee;color:#900;padding:8px;margin:0;white-space:pre-wrap;font-size:12px";d.textContent="プログラムが止まりました: "+m;document.body.insertBefore(d,document.body.firstChild);}' +
+    'window.addEventListener("error",function(e){show(e.message+" (行 "+e.lineno+" 列 "+e.colno+")");});' +
+    'window.addEventListener("unhandledrejection",function(e){show(String(e.reason&&e.reason.stack||e.reason));});})();</script>';
   const SIZE = 20000;
   const jsParts = [];
   for (let i = 0; i < min.code.length; i += SIZE) jsParts.push(min.code.slice(i, i + SIZE));
@@ -46,7 +50,7 @@ async function main() {
   const outDir = path.join(root, 'apps-script');
   fs.readdirSync(outDir).filter((f) => /^(Index|Style|Js\d+|Part_\w+)\.(html|gs)$/.test(f)).forEach((f) => fs.unlinkSync(path.join(outDir, f)));
   const files = {
-    'Index.html': '<!DOCTYPE html>\n<html lang="ja">\n<head>\n<meta charset="utf-8">\n<title>研修スケジュール管理</title>\n[[PART:Style]]\n</head>\n<body>\n' +
+    'Index.html': '<!DOCTYPE html>\n<html lang="ja">\n<head>\n<meta charset="utf-8">\n<title>研修スケジュール管理</title>\n[[PART:Style]]\n</head>\n<body>\n' + guard + '\n' +
       small + '\n' + marker + '\n<script>' + names.map((n) => '[[PART:' + n + ']]').join('') + '</script>\n</body>\n</html>' + end('Index'),
   };
   const parts = { Style: '<style>' + css + '</style>' };
