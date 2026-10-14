@@ -43,7 +43,7 @@ async function main() {
     'window.addEventListener("error",function(e){show(e.message+" (行 "+e.lineno+" 列 "+e.colno+")");});' +
     'setTimeout(function(){if(window.__APP_STARTED)return;var s=document.scripts,L=[],T=[],i,r="";for(i=0;i!=s.length;i++){L.push((s[i].text||"").length);T.push(s[i].text||"");}' +
     'T.sort(function(a,b){return b.length-a.length;});if(T[0]){try{new Function(T[0]);r=", 構文は正しい";}catch(e){r=", 構文エラー: "+e.message;}}' +
-    'show("プログラムが読み込まれていません(SheetDB="+typeof window.SheetDB+", スクリプトの長さ="+L.join("/")+r+")");},4000);' +
+    'show("プログラムが読み込まれていません(SheetDB="+typeof window.SheetDB+", スクリプトの長さ="+L.join("/")+r+")");},25000);' +
     'window.addEventListener("unhandledrejection",function(e){show(String(e.reason&&e.reason.stack||e.reason));});})();</script>';
   const SIZE = 20000;
   const code = min.code + '\n;window.__APP_STARTED=1;\n';   // 最後まで読み込めたかの目印(guard が確かめる)
@@ -55,7 +55,10 @@ async function main() {
   fs.readdirSync(outDir).filter((f) => /^(Index|Style|Js\d+|Part_\w+)\.(html|gs)$/.test(f)).forEach((f) => fs.unlinkSync(path.join(outDir, f)));
   const files = {
     'Index.html': '<!DOCTYPE html>\n<html lang="ja">\n<head>\n<meta charset="utf-8">\n<title>研修スケジュール管理</title>\n[[PART:Style]]\n</head>\n<body>\n' + guard + '\n' +
-      small + '\n' + marker + '\n<script>' + names.map((n) => '[[PART:' + n + ']]').join('') + '</script>\n</body>\n</html>' + end('Index'),
+      small + '\n' + marker + '\n<script>(function(){var names=' + JSON.stringify(names) + ',out=[];function show(m){var d=document.createElement("pre");d.style.cssText="background:#fee;color:#900;padding:8px;margin:0;white-space:pre-wrap;font-size:12px";d.textContent=m;document.body.insertBefore(d,document.body.firstChild);}' +
+      'function run(){try{(0,eval)(out.join(""));}catch(e){show("プログラムが止まりました: "+e.message);}}' +
+      'function next(i){if(i===names.length){run();return;}google.script.run.withSuccessHandler(function(t){out.push(t);next(i+1);}).withFailureHandler(function(e){show("プログラムの部品("+names[i]+")を取得できません: "+(e&&e.message||e));}).part(names[i]);}' +
+      'next(0);})();</script>\n</body>\n</html>' + end('Index'),
   };
   const parts = { Style: '<style>' + css + '</style>' };
   names.forEach((n, i) => { parts[n] = jsParts[i]; });

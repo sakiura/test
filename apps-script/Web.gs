@@ -28,20 +28,27 @@ function part_(name) {
   return f();
 }
 
+// 部品(または Index)を読み込む。貼り付けの不備は、{ title, detail } を投げる
+function load_(name) {
+  var t, isHtml = name === 'Index', file = isHtml ? 'HTML ファイル「' + name + '」' : 'スクリプト「Part_' + name + '」';
+  try { t = isHtml ? HtmlService.createHtmlOutputFromFile(name).getContent() : part_(name); }
+  catch (err) { throw { title: '画面のファイル(' + name + ')が見つかりません', detail: file + ' がありますか?(読み込み時のエラー: ' + String((err && err.message) || err).replace(/[<>&]/g, '').slice(0, 200) + ')' }; }
+  var mark = '\n[[END-OF-' + name + ']]', at = t.lastIndexOf(mark);
+  if (at < 0) throw { title: '画面のファイル(' + name + ')が最後まで貼り付けられていません', detail: '今は ' + t.length + ' 文字しか入っていません。末尾は「' + t.slice(-30).replace(/[<>&]/g, '') + '」です。' + file + ' の中身をすべて消して、貼り直してください。' };
+  return t.slice(0, at);
+}
+
+// 画面の本体(骨組みと見た目)。動き(Js1〜)は大きいので、ページが開いてから part() で取りに来る
 function page_() {
-  function load(name) {
-    var t, isHtml = name === 'Index', file = isHtml ? 'HTML ファイル「' + name + '」' : 'スクリプト「Part_' + name + '」';
-    try { t = isHtml ? HtmlService.createHtmlOutputFromFile(name).getContent() : part_(name); }
-    catch (err) { throw { title: '画面のファイル(' + name + ')が見つかりません', detail: file + ' がありますか?(読み込み時のエラー: ' + String((err && err.message) || err).replace(/[<>&]/g, '').slice(0, 200) + ')' }; }
-    var mark = '\n[[END-OF-' + name + ']]';
-    var at = t.lastIndexOf(mark);
-    if (at < 0) throw { title: '画面のファイル(' + name + ')が最後まで貼り付けられていません', detail: '今は ' + t.length + ' 文字しか入っていません。末尾は「' + t.slice(-30).replace(/[<>&]/g, '') + '」です。' + file + ' の中身をすべて消して、貼り直してください。' };
-    return t.slice(0, at);
-  }
-  var html = load('Index');
-  html = html.replace(/\[\[PART:(\w+)\]\]/g, function (m, name) { return load(name); });
+  var html = load_('Index').replace(/\[\[PART:(\w+)\]\]/g, function (m, name) { return load_(name); });
   if (html.indexOf('[[SHARE-CONFIG]]') < 0) throw { title: '画面のファイル(Index)が正しくありません', detail: 'Index の中身をすべて消して、Index.html の全文をコピーし直して貼り付けてください。' };
   return html;
+}
+
+// 画面から呼ばれる: 動きの部品(Js1〜)を返す
+function part(name) {
+  if (!/^Js\d$/.test(String(name))) throw new Error('bad_part');
+  try { return load_(String(name)); } catch (e) { throw new Error(e.title ? e.title + ': ' + e.detail : String(e)); }
 }
 
 // 設定の不備を、画面に分かりやすく出す

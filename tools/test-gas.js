@@ -143,14 +143,20 @@ names.forEach((f) => {
   // Apps Script は HTML ファイルを HTML として検査する。プログラム・CSS は .gs の文字列に入れる(HTML 側には < を含むものを置かない)
   if (f.endsWith('.gs')) assert(t.split('\n').length <= 4 && /^\/\/.*\nfunction part_\w+\(\) \{ return ".*"; \}\n$/s.test(t), f + ' は1行の文字列の関数');
 });
-const full = createGas({}).get({}).html;
-assert(full.includes('<style>') && full.includes('window.__GAS__') && !full.includes('[[PART:') && !full.includes('END-OF-'), '部品がつながる');
-new vm.Script(full.slice(full.lastIndexOf('<script>') + 8, full.lastIndexOf('</script>')));   // つないだ JS が、構文として正しい
+const gp = createGas({});
+const full = gp.get({}).html;
+assert(full.includes('<style>') && full.includes('window.__GAS__') && !full.includes('[[PART:') && !full.includes('END-OF-') && full.includes('google.script.run'), '骨組みと見た目がつながる(動きは、ページが開いてから取りに来る)');
+assert(Buffer.byteLength(full) < 60000, 'HTML は軽い(60,000バイト未満): ' + Buffer.byteLength(full));
+const jsNames = JSON.parse(/var names=(\[[^\]]*\])/.exec(full)[1]);
+assert(jsNames.length >= 1 && jsNames.every((n) => names.includes('Part_' + n + '.gs')), '取りに来る部品が、すべてある');
+new vm.Script(jsNames.map((n) => gp.ctx.part(n)).join(''));   // つないだ JS が、構文として正しい
+assert.throws(() => gp.ctx.part('Js1; evil'), /bad_part/, '部品の名前は決まった形だけ');
 const miss = createGas({}); miss.ctx.part_Js2 = undefined;
-assert(miss.get({}).html.includes('Js2)が見つかりません'), '部品がないときの案内');
+assert.throws(() => miss.ctx.part('Js2'), /Js2\)が見つかりません/, '部品がないときの案内');
 const cutG = createGas({}); cutG.ctx.part_Js1 = () => 'x'.repeat(5000);
-const cutPage = cutG.get({}).html;
-assert(cutPage.includes('Js1)が最後まで貼り付けられていません') && cutPage.includes('5000 文字しか入っていません'), '途中で切れているときの案内');
+assert.throws(() => cutG.ctx.part('Js1'), (e) => /Js1\)が最後まで貼り付けられていません/.test(e.message) && /5000 文字しか入っていません/.test(e.message), '途中で切れているときの案内');
+const noStyle = createGas({}); noStyle.ctx.part_Style = undefined;
+assert(noStyle.get({}).html.includes('Style)が見つかりません'), '見た目の部品がないときの案内');
 const noIdx = createGas({ files: { Index: null } });
 assert(noIdx.get({}).html.includes('Index)が見つかりません'), 'Index がないときの案内');
 console.log('Apps Script: すべて通りました');
