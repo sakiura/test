@@ -27,7 +27,9 @@ function page_() {
     var mark = '[[END-OF-' + name + ']]';
     var at = t.lastIndexOf(mark);
     if (at < 0) throw { title: '画面のファイル(' + name + ')が最後まで貼り付けられていません', detail: '今は ' + t.length + ' 文字しか入っていません。末尾は「' + t.slice(-30).replace(/[<>&]/g, '') + '」です。' + name + ' の中身をすべて消して、' + name + '.html の全文をコピーし直して貼り付けてください。貼り付けたあと、末尾が ' + mark + ' で終わっていれば全部入っています。' };
-    return t.slice(0, at);
+    t = t.slice(0, at);
+    // プログラムの部分は <script>〜</script> で包んで保存してある(HTML として検査を通すため)。包みを外す
+    return /^<script>[\s\S]*<\/script>\s*$/.test(t) ? t.replace(/^<script>/, '').replace(/<\/script>\s*$/, '') : t;
   }
   var html = load('Index');
   html = html.replace(/\[\[PART:(\w+)\]\]/g, function (m, name) { return load(name); });

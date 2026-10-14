@@ -145,6 +145,12 @@ assert(full.includes('<style>') && full.includes('window.__GAS__') && !full.incl
 const jsAll = full.slice(full.lastIndexOf('<script>') + 8, full.lastIndexOf('</script>'));
 new vm.Script(jsAll);   // つないだ JS が、構文として正しい
 assert(createGas({ files: { Js2: null } }).get({}).html.includes('Js2)が見つかりません'), '部品がないときの案内');
+// Apps Script は HTML ファイルを HTML として検査するので、JS 部品は <script> で包まれ、中に </script> や <!-- がないこと
+['Js1', 'Js2', 'Js3'].forEach((n) => {
+  const t = fs.readFileSync(path.join(__dirname, '..', 'apps-script', n + '.html'), 'utf8');
+  assert(t.startsWith('<script>') && t.includes('</script>\n[[END-OF-' + n + ']]'), n + ' は <script> で包まれている');
+  assert(t.indexOf('</script>') === t.lastIndexOf('</script>') && !t.includes('<!--'), n + ' の中に </script> や <!-- がない');
+});
 const half = fs.readFileSync(path.join(__dirname, '..', 'apps-script', 'Js1.html'), 'utf8').slice(0, 5000);
 const cutPage = createGas({ files: { Js1: half } }).get({}).html;
 assert(cutPage.includes('Js1)が最後まで貼り付けられていません') && cutPage.includes('5000 文字しか入っていません'), '途中で切れているときの案内');

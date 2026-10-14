@@ -26,7 +26,7 @@ async function main() {
   const js = read('sync-sheet.js') + '\n' + read('app.js');
   const min = await terser.minify(js, { ecma: 2020, compress: { passes: 2 }, mangle: true, format: { comments: false } });
   if (min.error) throw min.error;
-  if (min.code.includes('</script>')) throw new Error('JS の中に </script> があるとページが壊れる');
+  if (/<\/script|<!--/i.test(min.code)) throw new Error('JS の中に </script> があるとページが壊れる');
 
   const css = read('style.css')
     .replace(/\/\*[\s\S]*?\*\//g, '')
@@ -49,7 +49,8 @@ async function main() {
       small + '\n' + marker + '\n<script>' + names.map((n) => '[[PART:' + n + ']]').join('') + '</script>\n</body>\n</html>' + end('Index'),
     Style: '<style>' + css + '</style>' + end('Style'),
   };
-  names.forEach((n, i) => { files[n] = jsParts[i] + end(n); });
+  // Apps Script は HTML ファイルを HTML として検査する(中の < を、タグと勘違いして拒否する)ため、<script> で包む。Web.gs が包みを外してつなぐ
+  names.forEach((n, i) => { files[n] = '<script>' + jsParts[i] + '</script>' + end(n); });
   Object.keys(files).forEach((n) => fs.writeFileSync(path.join(outDir, n + '.html'), files[n]));
   console.log('作りました: ' + Object.keys(files).map((n) => n + '.html(' + files[n].length.toLocaleString() + '文字)').join(' / '));
 }
