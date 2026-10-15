@@ -90,6 +90,7 @@
     <span id="syncTag" class="sync-tag" role="status"></span>
     <button id="btnMigrate" class="small" type="button" hidden>このブラウザの保存データを共有に移す</button>
   </div>
+  <div id="statusBar" class="status-bar"></div>
   <div id="genreBar" class="genre-bar" aria-label="ジャンル"></div>
   <div id="banner" class="banner" hidden></div>
 
@@ -133,7 +134,7 @@
         <label>テスト結果・備考<input id="eResult"></label>
         <label>memo<input id="eMemo"></label>
       </div>
-      <label class="inline"><input id="eDone" type="checkbox"> 完了</label>
+      <label>進捗<select id="eStatus"></select></label>
       <div class="dlg-actions">
         <button type="submit" class="primary">保存</button>
         <button type="button" id="blockCancel" class="ghost">キャンセル</button>

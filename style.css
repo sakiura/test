@@ -100,7 +100,7 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--primary); o
 .blocks { padding: 8px 12px; display: grid; gap: 6px; min-height: 44px; }
 .blocks.drop-target, .backlog-list.drop-target { outline: 2px dashed var(--primary); outline-offset: -4px; border-radius: 6px; }
 .blk {
-  display: grid; grid-template-columns: 18px 22px 128px 1fr auto auto; gap: 8px; align-items: center;
+  display: grid; grid-template-columns: 18px 128px 1fr auto auto; gap: 8px; align-items: center;
   padding: 6px 8px; border: 1px solid var(--line); border-left: 4px solid var(--g, var(--primary)); border-radius: 6px; background: var(--panel);
 }
 .blk.done { opacity: .6; }
@@ -139,8 +139,8 @@ dialog label.inline { display: flex; gap: 6px; align-items: center; }
 @media (max-width: 900px) {
   .layout { grid-template-columns: 1fr; }
   .backlog { position: static; }
-  .blk { grid-template-columns: 18px 22px 1fr; }
-  .blk > :nth-child(n+4) { grid-column: 1 / -1; }
+  .blk { grid-template-columns: 18px 1fr; }
+  .blk > :nth-child(n+3) { grid-column: 1 / -1; }
 }
 @media print {
   .topbar, .toolbar, .backlog, .day-actions, .blk-actions, .grip, .day-foot, .banner { display: none !important; }
@@ -260,8 +260,8 @@ dialog select { display: block; width: 100%; margin-top: 3px; font-size: 14px; }
   .day-head label input { flex: 1; min-width: 0; }
   .day-sum { margin-left: 0; flex-basis: 100%; }
   .blocks { padding: 6px 8px; }
-  .blk { grid-template-columns: 14px 20px 1fr; gap: 4px 6px; padding: 6px; }
-  .blk > :nth-child(n+4) { grid-column: 1 / -1; }
+  .blk { grid-template-columns: 14px 1fr; gap: 4px 6px; padding: 6px; }
+  .blk > :nth-child(n+3) { grid-column: 1 / -1; }
   .blk-time { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
   .blk-actions { flex-wrap: wrap; }
   .day-foot { padding: 0 8px 8px; }
@@ -323,3 +323,13 @@ dialog select { display: block; width: 100%; margin-top: 3px; font-size: 14px; }
 /* 共有の設定 */
 .link-row { display: grid; grid-template-columns: 4em 1fr auto; gap: 6px; align-items: center; margin-bottom: 6px; font-size: 12px; color: var(--muted); }
 .link-row input { margin-top: 0; font-size: 12px; }
+
+/* 進捗(未着手・準備中・完了) */
+.status-bar { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; padding: 10px 16px 0; }
+.status-bar .tabs button small { margin-left: 4px; font-variant-numeric: tabular-nums; opacity: .8; }
+select.st { font-size: 12px; padding: 1px 4px; width: 100%; max-width: 110px; margin: 2px 0; }
+select.st-prep { background: color-mix(in srgb, #e6a817 28%, var(--panel)); }
+select.st-done { background: color-mix(in srgb, var(--ok) 26%, var(--panel)); }
+.backlog-list .blk .b-sub select.st { width: auto; margin: 0; }
+.st-mark { color: #c58a00; }
+@media print { .status-bar { display: none !important; } }

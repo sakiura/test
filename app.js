@@ -154,9 +154,16 @@
   function newSchedule(name) {
     return { id: uid(), name, month: ymOf(new Date()), endDate: '', days: [], backlog: [], skipHolidays: false, defaultStart: '10:00', defaultGap: 15, endLimit: '18:00', history: [] };
   }
+  // コマの進捗。「完了」だけだった旧データは done から読み替える
+  const STATUSES = [{ key: 'todo', label: '未着手' }, { key: 'prep', label: '準備中' }, { key: 'done', label: '完了' }];
+  const stOf = (b) => (STATUSES.some((x) => x.key === b.status) ? b.status : b.done ? 'done' : 'todo');
+  const setStatus = (b, key) => { b.status = key; b.done = key === 'done'; };
+  const statusLabel = (key) => (STATUSES.find((x) => x.key === key) || STATUSES[0]).label;
+  const statusFromText = (t) => (t === '完了' ? 'done' : t === '準備中' ? 'prep' : 'todo');
+  const statusOptsHtml = (cur) => STATUSES.map((x) => `<option value="${x.key}"${x.key === cur ? ' selected' : ''}>${x.label}</option>`).join('');
   function newBlock(o = {}) {
     return { id: uid(), title: '', minutes: 60, gap: 0, genre: '', dept: '', person: '', purpose: '', detail: '', materials: '', links: [],
-      test: '', result: '', done: false, venue: '', memo: '', ...o };
+      test: '', result: '', status: 'todo', done: false, venue: '', memo: '', ...o };
   }
   function loadStore() {
     let st = null;
@@ -182,7 +189,8 @@
   const sortedSchedules = () => [...store.schedules].sort((a, b) => a.month.localeCompare(b.month) || (a.name || '').localeCompare(b.name || ''));
   const genreColor = (name) => (store.genres.find((g) => g.name === name) || {}).color || '#7b8494';
   let genreFilter = ''; // '' = すべて / '__none' = 未設定
-  const matchGenre = (b) => !genreFilter || (genreFilter === '__none' ? !b.genre : b.genre === genreFilter);
+  let statusFilter = ''; // '' = すべて / todo / prep / done
+  const matchFilter = (b) => (!genreFilter || (genreFilter === '__none' ? !b.genre : b.genre === genreFilter)) && (!statusFilter || stOf(b) === statusFilter);
 
   // 保存と変更履歴(変更前の状態を、編集10分ごと・大きな操作の前に残す)
   const CUR_KEY = 'training-schedule-current';
@@ -301,6 +309,7 @@
     $('setGap').value = s.defaultGap;
     $('setEnd').value = s.endLimit;
     renderGenreBar(s);
+    renderStatusBar(s);
   }
 
   function renderGenreBar(s) {
@@ -317,12 +326,21 @@
     $('genreBar').innerHTML = html;
   }
 
+  function renderStatusBar(s) {
+    const cnt = { todo: 0, prep: 0, done: 0 };
+    [...s.days.flatMap((d) => d.blocks), ...s.backlog].forEach((b) => { cnt[stOf(b)]++; });
+    const tabs = [['', 'すべて', cnt.todo + cnt.prep + cnt.done], ...STATUSES.map((x) => [x.key, x.label, cnt[x.key]])];
+    $('statusBar').innerHTML = '<span class="hint" style="margin:0">進捗:</span><div class="tabs" role="group" aria-label="進捗で絞り込み">' +
+      tabs.map(([k, l, n]) => `<button type="button" data-status="${k}" aria-pressed="${statusFilter === k}">${l}<small>${n}</small></button>`).join('') + '</div>';
+  }
+
   function renderSummary(s) {
     const blocks = s.days.reduce((n, d) => n + d.blocks.length, 0);
     const mins = s.days.reduce((n, d) => n + d.blocks.reduce((m, b) => m + (Number(b.minutes) || 0), 0), 0);
-    const done = s.days.reduce((n, d) => n + d.blocks.filter((b) => b.done).length, 0);
+    const done = s.days.reduce((n, d) => n + d.blocks.filter((b) => stOf(b) === 'done').length, 0);
+    const prep = s.days.reduce((n, d) => n + d.blocks.filter((b) => stOf(b) === 'prep').length, 0);
     $('summary').textContent = s.days.length
-      ? `${s.days.length}日 / ${blocks}コマ(完了${done}) / 合計${(mins / 60).toFixed(1)}時間 / ${jpDate(s.days[0].date)}〜${jpDate(s.days[s.days.length - 1].date)}${s.endDate ? ` / 研修終了日 ${jpDate(s.endDate)}` : ''}`
+      ? `${s.days.length}日 / ${blocks}コマ(完了${done} / 準備中${prep}) / 合計${(mins / 60).toFixed(1)}時間 / ${jpDate(s.days[0].date)}〜${jpDate(s.days[s.days.length - 1].date)}${s.endDate ? ` / 研修終了日 ${jpDate(s.endDate)}` : ''}`
       : '';
   }
 
@@ -506,10 +524,11 @@
   function blockHtml(d, b, bs, be, idx) {
     const v = effVenue(d, b);
     const meta = [b.purpose, v && v !== d.venue ? `📍${v}` : ''].filter(Boolean).join(' / ');
-    return `<div class="blk${b.done ? ' done' : ''}${matchGenre(b) ? '' : ' dim'}" data-block="${b.id}"${b.genre ? ` style="--g:${genreColor(b.genre)}"` : ''}>
+    const st = stOf(b);
+    return `<div class="blk${st === 'done' ? ' done' : ''}${matchFilter(b) ? '' : ' dim'}" data-block="${b.id}"${b.genre ? ` style="--g:${genreColor(b.genre)}"` : ''}>
       <span class="grip" title="ドラッグで移動">⋮⋮</span>
-      <input type="checkbox" data-bf="done" ${b.done ? 'checked' : ''} aria-label="完了">
       <div class="blk-time">${fmtMin(bs)}–${fmtMin(be)}
+        <select class="st st-${st}" data-bf="status" aria-label="進捗">${statusOptsHtml(st)}</select>
         ${idx > 0 ? `<label class="gap">空き<input type="number" data-bf="gap" min="0" step="5" value="${Number(b.gap) || 0}">分</label>` : ''}
       </div>
       <div>
@@ -531,7 +550,8 @@
   }
 
   function backlogHtml(s, b) {
-    return `<div class="blk${matchGenre(b) ? '' : ' dim'}" data-block="${b.id}"${b.genre ? ` style="--g:${genreColor(b.genre)}"` : ''}>
+    const st = stOf(b);
+    return `<div class="blk${st === 'done' ? ' done' : ''}${matchFilter(b) ? '' : ' dim'}" data-block="${b.id}"${b.genre ? ` style="--g:${genreColor(b.genre)}"` : ''}>
       <span class="grip" title="ドラッグで移動">⋮⋮</span>
       <div><div class="blk-title">${esc(b.title)}${b.genre ? `<span class="tag genre">${esc(b.genre)}</span>` : ''}${b.test ? `<span class="tag test">${esc(b.test)}</span>` : ''}</div>
         ${whoHtml(b)}${linksHtml(b)}</div>
@@ -539,7 +559,9 @@
       <div class="b-sub">
         <select data-act="to-day" aria-label="日へ入れる"><option value="">日へ入れる…</option>
           ${s.days.map((d) => `<option value="${d.id}">${esc(jpDate(d.date))}</option>`).join('')}</select>
+        <select class="st st-${st}" data-bf="status" aria-label="進捗">${statusOptsHtml(st)}</select>
         <button type="button" class="small" data-act="blk-edit">編集</button>
+        <button type="button" class="small" data-act="blk-dup">複製</button>
         <button type="button" class="small danger" data-act="blk-del">削除</button>
       </div>
     </div>`;
@@ -603,7 +625,7 @@
           <div class="cal-top"><span class="cal-num dow-${hol ? 0 : wd}">${d.getDate()}</span>${hol ? `<span class="cal-hol">${esc(hol)}</span>` : ''}${key === s.endDate ? '<span class="cal-end">研修終了</span>' : ''}
             ${days.length ? '' : `<button type="button" class="cal-add" data-act="cal-add" data-date="${key}" aria-label="${d.getMonth() + 1}月${d.getDate()}日に研修日を追加">＋</button>`}</div>
           ${days.map((day) => `${day.section ? `<div class="cal-sec">${esc(day.section)}</div>` : ''}${day.venue ? `<div class="cal-venue">${esc(day.venue)}</div>` : ''}`).join('')}
-          ${lines.slice(0, MAX).map(({ b, bs }) => `<div class="cal-line${b.done ? ' done' : ''}${b.test ? ' test' : ''}${matchGenre(b) ? '' : ' dim'}"${b.genre ? ` style="--g:${genreColor(b.genre)}"` : ''}><span class="dot"></span><span class="t">${fmtMin(bs)}</span> ${esc(b.title)}</div>`).join('')}
+          ${lines.slice(0, MAX).map(({ b, bs }) => `<div class="cal-line${stOf(b) === 'done' ? ' done' : ''}${b.test ? ' test' : ''}${matchFilter(b) ? '' : ' dim'}"${b.genre ? ` style="--g:${genreColor(b.genre)}"` : ''}><span class="dot"></span><span class="t">${fmtMin(bs)}</span> ${stOf(b) === 'prep' ? '<span class="st-mark" title="準備中">◐</span> ' : ''}${esc(b.title)}</div>`).join('')}
           ${lines.length > MAX ? `<div class="cal-more">ほか${lines.length - MAX}件</div>` : ''}
         </div>`;
       }
@@ -677,7 +699,7 @@
     sc.month = ym;
     if (!src) return sc;
     Object.assign(sc, { skipHolidays: src.skipHolidays, defaultStart: src.defaultStart, defaultGap: src.defaultGap, endLimit: src.endLimit });
-    const fresh = (b) => ({ ...b, id: uid(), done: false, result: '' });
+    const fresh = (b) => ({ ...b, id: uid(), status: 'todo', done: false, result: '' });
     let prevOld = null, prevNew = null;
     [...src.days].sort((a, b) => a.date.localeCompare(b.date)).forEach((d) => {
       const nd = !prevOld ? firstBizOfMonth(ym, sc.skipHolidays)
@@ -859,7 +881,7 @@
     ['blocks', 'venue', 'start', 'section'].forEach((k) => { const t = a[k]; a[k] = b[k]; b[k] = t; });
   }
   const stripId = (b) => { const { id, ...rest } = b; return rest; };
-  const cloneBlock = (b) => ({ ...b, id: uid(), done: false });
+  const cloneBlock = (b) => ({ ...b, id: uid(), status: 'todo', done: false });
 
   async function onClick(e) {
     const btn = e.target.closest('[data-act]');
@@ -948,7 +970,7 @@
       const f = findBlock(blkEl.dataset.block);
       if (!f) return;
       const b = f.list[f.i];
-      if (t.dataset.bf === 'done') b.done = t.checked;
+      if (t.dataset.bf === 'status') setStatus(b, t.value);
       else if (t.dataset.bf === 'dept' || t.dataset.bf === 'person') b[t.dataset.bf] = t.value;
       else b[t.dataset.bf] = Math.max(t.dataset.bf === 'minutes' ? 5 : 0, parseInt(t.value, 10) || 0);
       commit();
@@ -1073,7 +1095,7 @@
     $('eGenre').innerHTML = '<option value="">(未設定)</option>' + names.map((n) => `<option>${esc(n)}</option>`).join('');
     $('blockDlgTitle').textContent = isNew ? 'コマを追加' : 'コマを編集';
     for (const [id, key] of Object.entries(FIELDS)) $(id).value = b[key] ?? '';
-    $('eDone').checked = !!b.done;
+    $('eStatus').innerHTML = statusOptsHtml(stOf(b));
     $('eLinks').value = linkLines(b.links).join('\n');
     $('eLinksErr').hidden = true;
     $('blockDlg').showModal();
@@ -1085,7 +1107,8 @@
     for (const [id, key] of Object.entries(FIELDS)) data[key] = $(id).value.trim();
     data.minutes = Math.max(5, parseInt(data.minutes, 10) || 60);
     data.gap = Math.max(0, parseInt(data.gap, 10) || 0);
-    data.done = $('eDone').checked;
+    data.status = $('eStatus').value;
+    data.done = data.status === 'done';
     const parsed = parseLinks($('eLinks').value);
     if (parsed.bad.length) {
       $('eLinksErr').textContent = `URLとして読み取れない行があります(http:// または https:// で始まるURLを入れてください): ${parsed.bad[0]}`;
@@ -1176,7 +1199,7 @@
           title: title || g(r, '目的') || '(無題)', minutes: Math.max(5, e - s), dept: g(r, '担当'), person: g(r, '担当者'),
           test: dash(g(r, 'test')), purpose: g(r, '目的'), detail: g(r, '詳細'),
           ...parseMaterials([g(r, '資料1'), g(r, '資料2')]),
-          result: dash(g(r, 'result')), done: g(r, '進捗') === '完了', memo: g(r, 'memo'),
+          result: dash(g(r, 'result')), status: statusFromText(g(r, '進捗')), done: g(r, '進捗') === '完了', memo: g(r, 'memo'),
           genre: g(r, 'genre') || guessGenre(title || g(r, '目的'), g(r, '目的')),
           venue: !dm && g(r, '会場') && day && g(r, '会場') !== day.venue ? g(r, '会場') : '',
         });
@@ -1214,7 +1237,7 @@
       tl.forEach(({ b, s: bs, e: be }, i) => {
         const v = effVenue(d, b);
         rows.push(['', i === 0 ? md(d.date) : i === 1 ? wd : '', i === 0 ? d.venue : (v !== d.venue ? v : ''),
-          `${fmtMin(bs)}-${fmtMin(be)}`, b.minutes, b.dept, b.person, b.title, b.test, b.purpose, b.detail, matCell(b), '', b.result, b.done ? '完了' : '', b.memo, b.genre]);
+          `${fmtMin(bs)}-${fmtMin(be)}`, b.minutes, b.dept, b.person, b.title, b.test, b.purpose, b.detail, matCell(b), '', b.result, statusLabel(stOf(b)), b.memo, b.genre]);
       });
       if (tl.length === 1) rows.push(['', wd]);
     });
@@ -1315,7 +1338,7 @@
     if (k && k[0] === '_') return undefined;
     return x && typeof x === 'object' && !Array.isArray(x) ? Object.keys(x).sort().reduce((o, kk) => { o[kk] = x[kk]; return o; }, {}) : x;
   });
-  const normBlock = (b) => ({ ...newBlock(), ...b });
+  const normBlock = (b) => { const o = { ...newBlock(), ...b }; o.status = stOf(b); o.done = o.status === 'done'; return o; };
   const canon = {
     schedules: (d) => ({ name: d.name || '', month: d.month || ymOf(new Date()), endDate: d.endDate || '', skipHolidays: !!d.skipHolidays,
       defaultStart: d.defaultStart || '10:00', defaultGap: Number.isFinite(d.defaultGap) ? d.defaultGap : 15, endLimit: d.endLimit || '18:00' }),
@@ -1656,6 +1679,10 @@
     $('btnHistory').addEventListener('click', openHistory);
     $('histClose').addEventListener('click', () => $('histDlg').close());
     $('histList').addEventListener('click', (e) => { const b = e.target.closest('[data-hist]'); if (b) restoreSnap(Number(b.dataset.hist)); });
+    $('statusBar').addEventListener('click', (e) => {
+      const c = e.target.closest('[data-status]');
+      if (c) { statusFilter = c.dataset.status; render(); }
+    });
     $('genreBar').addEventListener('click', (e) => {
       if (e.target.closest('#btnGenres')) return openGenreDialog();
       if (e.target.closest('#btnDepts')) return openMasterDialog('depts');
