@@ -103,7 +103,6 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--primary); o
   display: grid; grid-template-columns: 18px 128px 1fr auto auto; gap: 8px; align-items: center;
   padding: 6px 8px; border: 1px solid var(--line); border-left: 4px solid var(--g, var(--primary)); border-radius: 6px; background: var(--panel);
 }
-.blk.done { opacity: .6; }
 .blk.dim, .cal-line.dim { opacity: .22; }
 .blk.dragging { opacity: .35; }
 .blk.insert-before { box-shadow: 0 -3px 0 0 var(--primary); }
@@ -182,7 +181,7 @@ dialog label.inline { display: flex; gap: 6px; align-items: center; }
 .cal-venue { font-size: 10px; color: var(--muted); overflow-wrap: anywhere; }
 .cal-line { font-size: 11px; line-height: 1.35; overflow-wrap: anywhere; }
 .cal-line .t { font-variant-numeric: tabular-nums; color: var(--muted); }
-.cal-line.done { text-decoration: line-through; opacity: .6; }
+.cal-line.done { text-decoration: line-through; }
 .cal-line.test { color: var(--danger); }
 .cal-more { font-size: 10px; color: var(--muted); }
 
