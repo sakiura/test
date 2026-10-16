@@ -625,7 +625,7 @@
           <div class="cal-top"><span class="cal-num dow-${hol ? 0 : wd}">${d.getDate()}</span>${hol ? `<span class="cal-hol">${esc(hol)}</span>` : ''}${key === s.endDate ? '<span class="cal-end">研修終了</span>' : ''}
             ${days.length ? '' : `<button type="button" class="cal-add" data-act="cal-add" data-date="${key}" aria-label="${d.getMonth() + 1}月${d.getDate()}日に研修日を追加">＋</button>`}</div>
           ${days.map((day) => `${day.section ? `<div class="cal-sec">${esc(day.section)}</div>` : ''}${day.venue ? `<div class="cal-venue">${esc(day.venue)}</div>` : ''}`).join('')}
-          ${lines.slice(0, MAX).map(({ b, bs }) => `<div class="cal-line${stOf(b) === 'done' ? ' done' : ''}${b.test ? ' test' : ''}${matchFilter(b) ? '' : ' dim'}"${b.genre ? ` style="--g:${genreColor(b.genre)}"` : ''}><span class="dot"></span><span class="t">${fmtMin(bs)}</span> ${stOf(b) === 'prep' ? '<span class="st-mark" title="準備中">◐</span> ' : ''}${esc(b.title)}</div>`).join('')}
+          ${lines.slice(0, MAX).map(({ b, bs }) => `<div class="cal-line${b.test ? ' test' : ''}${matchFilter(b) ? '' : ' dim'}"${b.genre ? ` style="--g:${genreColor(b.genre)}"` : ''}><span class="dot"></span><span class="t">${fmtMin(bs)}</span> ${stOf(b) === 'prep' ? '<span class="st-mark" title="準備中">◐</span> ' : ''}${esc(b.title)}</div>`).join('')}
           ${lines.length > MAX ? `<div class="cal-more">ほか${lines.length - MAX}件</div>` : ''}
         </div>`;
       }

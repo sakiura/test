@@ -181,7 +181,7 @@ dialog label.inline { display: flex; gap: 6px; align-items: center; }
 .cal-venue { font-size: 10px; color: var(--muted); overflow-wrap: anywhere; }
 .cal-line { font-size: 11px; line-height: 1.35; overflow-wrap: anywhere; }
 .cal-line .t { font-variant-numeric: tabular-nums; color: var(--muted); }
-.cal-line.done { text-decoration: line-through; }
+
 .cal-line.test { color: var(--danger); }
 .cal-more { font-size: 10px; color: var(--muted); }
 
