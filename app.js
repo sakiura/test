@@ -163,7 +163,7 @@
   const statusOptsHtml = (cur) => STATUSES.map((x) => `<option value="${x.key}"${x.key === cur ? ' selected' : ''}>${x.label}</option>`).join('');
   function newBlock(o = {}) {
     return { id: uid(), title: '', minutes: 60, gap: 0, genre: '', dept: '', person: '', purpose: '', detail: '', materials: '', links: [],
-      test: '', result: '', status: 'todo', done: false, venue: '', memo: '', ...o };
+      test: '', result: '', status: 'todo', done: false, venue: '', memo: '', breakMin: 0, breakAt: '', ...o };
   }
   function loadStore() {
     let st = null;
@@ -246,6 +246,14 @@
       t += Math.max(0, Number(b.minutes) || 0);
       return { b, s, e: t };
     });
+  }
+  // 中休憩: コマの長さの「中」に入れる休憩。開始位置(コマの開始から何分後か)が空なら、ほぼ真ん中に置く
+  function breakSpan(b, s) {
+    const len = Math.max(0, Number(b.minutes) || 0), bm = Math.min(Math.max(0, Number(b.breakMin) || 0), len);
+    if (!bm) return null;
+    const raw = b.breakAt === '' || b.breakAt == null ? Math.round((len - bm) / 2 / 5) * 5 : Number(b.breakAt) || 0;
+    const at = Math.min(Math.max(0, raw), len - bm);
+    return { s: s + at, e: s + at + bm };
   }
   const effVenue = (day, b) => b.venue || day.venue || '';
   const sortDays = (s) => s.days.sort((a, b) => a.date.localeCompare(b.date));
@@ -524,17 +532,20 @@
   function blockHtml(d, b, bs, be, idx) {
     const v = effVenue(d, b);
     const meta = [b.purpose, v && v !== d.venue ? `📍${v}` : ''].filter(Boolean).join(' / ');
+    const br = breakSpan(b, bs);
     const st = stOf(b);
     return `<div class="blk${st === 'done' ? ' done' : ''}${matchFilter(b) ? '' : ' dim'}" data-block="${b.id}"${b.genre ? ` style="--g:${genreColor(b.genre)}"` : ''}>
       <span class="grip" title="ドラッグで移動">⋮⋮</span>
       <div class="blk-time">${fmtMin(bs)}–${fmtMin(be)}
         <select class="st st-${st}" data-bf="status" aria-label="進捗">${statusOptsHtml(st)}</select>
         ${idx > 0 ? `<label class="gap">空き<input type="number" data-bf="gap" min="0" step="5" value="${Number(b.gap) || 0}">分</label>` : ''}
+        <label class="gap">中休憩<input type="number" data-bf="breakMin" min="0" step="5" value="${Number(b.breakMin) || 0}">分</label>
       </div>
       <div>
         <div class="blk-title">${esc(b.title)}${b.genre ? `<span class="tag genre">${esc(b.genre)}</span>` : ''}${b.test ? `<span class="tag test">${esc(b.test)}</span>` : ''}</div>
         ${whoHtml(b)}
         ${meta ? `<div class="meta">${esc(meta)}</div>` : ''}
+        ${br ? `<div class="meta brk">☕ 中休憩 ${fmtMin(br.s)}–${fmtMin(br.e)}</div>` : ''}
         ${linksHtml(b)}
       </div>
       <label class="mins"><input type="number" data-bf="minutes" min="5" step="5" value="${Number(b.minutes) || 0}">分</label>
@@ -1082,7 +1093,7 @@
   // ---------- コマ編集ダイアログ ----------
   let editing = null; // { id|null, target }
   const FIELDS = { eTitle: 'title', eMinutes: 'minutes', eGap: 'gap', eVenue: 'venue', eDept: 'dept', ePerson: 'person',
-    eGenre: 'genre', ePurpose: 'purpose', eDetail: 'detail', eMaterials: 'materials', eTest: 'test', eResult: 'result', eMemo: 'memo' };
+    eBreak: 'breakMin', eBreakAt: 'breakAt', eGenre: 'genre', ePurpose: 'purpose', eDetail: 'detail', eMaterials: 'materials', eTest: 'test', eResult: 'result', eMemo: 'memo' };
   function openBlockDialog(block, target) {
     const s = cur();
     const isNew = !block;
@@ -1107,6 +1118,8 @@
     for (const [id, key] of Object.entries(FIELDS)) data[key] = $(id).value.trim();
     data.minutes = Math.max(5, parseInt(data.minutes, 10) || 60);
     data.gap = Math.max(0, parseInt(data.gap, 10) || 0);
+    data.breakMin = Math.max(0, parseInt(data.breakMin, 10) || 0);
+    data.breakAt = data.breakAt === '' ? '' : Math.max(0, parseInt(data.breakAt, 10) || 0);
     data.status = $('eStatus').value;
     data.done = data.status === 'done';
     const parsed = parseLinks($('eLinks').value);
@@ -1161,7 +1174,7 @@
       rows[hi].forEach((c, i) => {
         c = c.trim();
         if (!c) return;
-        if (c === 'テスト') { if (!seenTest) { H.test = i; seenTest = true; } else H.result = i; } else if (c === 'ジャンル' || c === '分類') H.genre = i; else if (c in H) H[c] = i;
+        if (c === 'テスト') { if (!seenTest) { H.test = i; seenTest = true; } else H.result = i; } else if (c === 'ジャンル' || c === '分類') H.genre = i; else if (c === '中休憩') H.breakCell = i; else if (c in H) H[c] = i;
       });
     }
     const g = (r, k) => (r[H[k]] || '').trim();
@@ -1203,6 +1216,11 @@
           genre: g(r, 'genre') || guessGenre(title || g(r, '目的'), g(r, '目的')),
           venue: !dm && g(r, '会場') && day && g(r, '会場') !== day.venue ? g(r, '会場') : '',
         });
+        const bk = TIME.exec(g(r, 'breakCell'));   // 「11:55-12:05」の形。コマの中に収まるときだけ使う
+        if (bk) {
+          const bs2 = toMin(`${bk[1]}:${bk[2]}`), be2 = toMin(`${bk[3]}:${bk[4]}`);
+          if (bs2 >= s && be2 <= e && be2 > bs2) { b.breakMin = be2 - bs2; b.breakAt = bs2 - s; }
+        }
         b._s = s; b._e = e;
         if (day) day.blocks.push(b); else backlog.push(b);
       } else if (!dcell && !g(r, '会場') && parseInt(g(r, '分'), 10) > 0) {
@@ -1211,6 +1229,7 @@
         const dept = g(r, '担当');
         backlog.push(newBlock({ title: title || dept || '(無題)', dept: title ? dept : '', person: g(r, '担当者'), minutes: mins, test: dash(g(r, 'test')),
           purpose: g(r, '目的'), detail: g(r, '詳細'), memo: g(r, 'memo'), ...parseMaterials([g(r, '資料1'), g(r, '資料2')]),
+          breakMin: /^\d+分$/.test(g(r, 'breakCell')) ? parseInt(g(r, 'breakCell'), 10) : 0,
           genre: g(r, 'genre') || guessGenre(title || dept, g(r, '目的')) }));
       }
     });
@@ -1227,7 +1246,7 @@
 
   const matCell = (b) => [b.materials, ...linkLines(b.links)].filter(Boolean).join('\n');
   function buildRows(s) {
-    const rows = [['', '日程', '会場', '時間', '分', '担当', '担当者', '研修内容', 'テスト', '目的', '詳細', '資料1', '資料2', 'テスト', '進捗', 'memo', 'ジャンル']];
+    const rows = [['', '日程', '会場', '時間', '分', '担当', '担当者', '研修内容', 'テスト', '目的', '詳細', '資料1', '資料2', 'テスト', '進捗', 'memo', 'ジャンル', '中休憩']];
     const md = (d) => { const x = parseDate(d); return `${x.getMonth() + 1}/${x.getDate()}`; };
     s.days.forEach((d) => {
       if (d.section) rows.push(['', d.section]);
@@ -1237,11 +1256,11 @@
       tl.forEach(({ b, s: bs, e: be }, i) => {
         const v = effVenue(d, b);
         rows.push(['', i === 0 ? md(d.date) : i === 1 ? wd : '', i === 0 ? d.venue : (v !== d.venue ? v : ''),
-          `${fmtMin(bs)}-${fmtMin(be)}`, b.minutes, b.dept, b.person, b.title, b.test, b.purpose, b.detail, matCell(b), '', b.result, statusLabel(stOf(b)), b.memo, b.genre]);
+          `${fmtMin(bs)}-${fmtMin(be)}`, b.minutes, b.dept, b.person, b.title, b.test, b.purpose, b.detail, matCell(b), '', b.result, statusLabel(stOf(b)), b.memo, b.genre, (() => { const br = breakSpan(b, bs); return br ? `${fmtMin(br.s)}-${fmtMin(br.e)}` : ''; })()]);
       });
       if (tl.length === 1) rows.push(['', wd]);
     });
-    s.backlog.forEach((b) => rows.push(['', '', '', '', b.minutes, b.dept, b.person, b.title, b.test, b.purpose, b.detail, matCell(b), '', b.result, '', b.memo, b.genre]));
+    s.backlog.forEach((b) => rows.push(['', '', '', '', b.minutes, b.dept, b.person, b.title, b.test, b.purpose, b.detail, matCell(b), '', b.result, '', b.memo, b.genre, b.breakMin ? `${b.breakMin}分` : '']));
     return rows;
   }
   const toDelimited = (rows, delim) => rows.map((r) => r.map((v) => {
@@ -1268,7 +1287,7 @@
     cur().days.forEach((d) => layout(d).forEach(({ b, s, e }) => {
       out.push('BEGIN:VEVENT', `UID:${b.id}@training-schedule`, `DTSTAMP:${now}`, `DTSTART:${dt(d.date, s)}`, `DTEND:${dt(d.date, e)}`, `SUMMARY:${e2(b.title)}`);
       if (effVenue(d, b)) out.push(`LOCATION:${e2(effVenue(d, b))}`);
-      const desc = [b.dept && b.person ? `${b.dept} ${b.person}` : b.dept || b.person, b.purpose, b.detail, ...(b.links || []).map((l) => `${l.title || '資料'}: ${l.url}`)].filter(Boolean).join('\n');
+      const brk = breakSpan(b, s), desc = [b.dept && b.person ? `${b.dept} ${b.person}` : b.dept || b.person, b.purpose, b.detail, brk ? `中休憩 ${fmtMin(brk.s)}-${fmtMin(brk.e)}` : '', ...(b.links || []).map((l) => `${l.title || '資料'}: ${l.url}`)].filter(Boolean).join('\n');
       if (desc) out.push(`DESCRIPTION:${e2(desc)}`);
       if (b.genre) out.push(`CATEGORIES:${e2(b.genre)}`);
       if (b.links && b.links[0]) out.push(`URL:${b.links[0].url}`);

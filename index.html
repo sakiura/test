@@ -116,6 +116,10 @@
         <label>前との空き(分)<input id="eGap" type="number" min="0" step="5"></label>
         <label>会場(この回のみ)<input id="eVenue" placeholder="日の会場と同じなら空欄"></label>
       </div>
+      <div class="grid2">
+        <label>中休憩の長さ(分)<span class="sub">(コマの長さの中に入れます。0なら休憩なし)</span><input id="eBreak" type="number" min="0" step="5"></label>
+        <label>中休憩の開始(コマの開始から何分後)<span class="sub">(空欄なら、ほぼ真ん中)</span><input id="eBreakAt" type="number" min="0" step="5"></label>
+      </div>
       <label>ジャンル<select id="eGenre"></select></label>
       <div class="grid2">
         <label>担当(部署)<span class="inline-actions"><select id="eDept"></select><button type="button" class="small" id="btnDeptEdit">追加・編集</button></span></label>
