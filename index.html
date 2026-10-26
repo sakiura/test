@@ -47,6 +47,10 @@
         </div>
         <hr>
         <div class="bulk-row">
+          <button id="btnMorning" type="button">朝礼を一括で入れる…</button>
+          <span class="hint" style="margin:0">各日の最初に朝礼のコマを入れます(入れない日は、あとでチェックを外せます)。</span>
+        </div>
+        <div class="bulk-row">
           <label>研修終了日 <input id="schedEnd" type="date"></label>
           <span class="hint" style="margin:0">この月の研修が終わる日(任意)。これより後に研修日があると警告します。</span>
         </div>
@@ -212,6 +216,30 @@
       <div class="dlg-actions">
         <button type="submit" class="primary">保存</button>
         <button type="button" id="genreCancel" class="ghost">キャンセル</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="morningDlg">
+    <form id="morningForm" autocomplete="off">
+      <h3>朝礼を一括で入れる</h3>
+      <p class="hint">選んだ日の「最初」に、朝礼のコマを入れます。その日の後ろのコマは、朝礼の長さの分だけ後ろへずれます。</p>
+      <div class="grid3">
+        <label>内容<input id="mdTitle" required></label>
+        <label>長さ(分)<input id="mdMinutes" type="number" min="5" step="5" required></label>
+        <label>空き(後ろのコマとの間・分)<input id="mdGap" type="number" min="0" step="5"></label>
+      </div>
+      <div class="grid2">
+        <label>担当(部署)<select id="mdDept"></select></label>
+        <label>担当者<select id="mdPerson"></select></label>
+      </div>
+      <label>入れる日<span class="sub">(チェックを外した日には入れません。すでに朝礼がある日は、はじめから外れています)</span></label>
+      <div id="mdDays" class="md-days"></div>
+      <p id="mdSummary" class="preview"></p>
+      <div class="dlg-actions">
+        <button type="submit" class="primary">入れる</button>
+        <button type="button" id="mdAll" class="ghost">すべて選ぶ</button>
+        <button type="button" id="mdCancel" class="ghost">キャンセル</button>
       </div>
     </form>
   </dialog>

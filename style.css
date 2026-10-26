@@ -331,3 +331,11 @@ select.st-done { background: color-mix(in srgb, var(--ok) 26%, var(--panel)); }
 .backlog-list .blk .b-sub select.st { width: auto; margin: 0; }
 .st-mark { color: #c58a00; }
 @media print { .status-bar { display: none !important; } }
+
+/* 朝礼を一括で入れる */
+.md-days { display: grid; gap: 2px; max-height: 40vh; overflow-y: auto; border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; margin-bottom: 8px; }
+.md-day { display: flex; gap: 8px; align-items: center; margin: 0; font-size: 13px; color: var(--text); }
+.md-day input { width: auto; margin: 0; display: inline-block; }
+.md-day small { color: var(--muted); }
+.md-day.md-has { opacity: .6; }
+.md-over { color: var(--danger); }

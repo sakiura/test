@@ -785,6 +785,42 @@
     render();
   }
 
+  // ---------- 朝礼を一括で入れる ----------
+  const hasMorning = (d, title) => d.blocks.some((b) => b.title === title);
+  function morningInput() {
+    return { title: $('mdTitle').value.trim(), minutes: Math.max(5, parseInt($('mdMinutes').value, 10) || 15), gap: Math.max(0, parseInt($('mdGap').value, 10) || 0) };
+  }
+  function renderMorningDays(keepChecked) {
+    const s = cur(), { title, minutes, gap } = morningInput();
+    const was = new Set([...document.querySelectorAll('#mdDays input:checked')].map((e) => e.dataset.md));
+    $('mdDays').innerHTML = s.days.map((d) => {
+      const tl = layout(d), has = hasMorning(d, title);
+      const end = tl.length ? tl[tl.length - 1].e : toMin(d.start || '10:00');
+      const newEnd = end + minutes + (tl.length ? gap : 0);
+      const over = !has && newEnd > toMin(s.endLimit);
+      const on = keepChecked ? was.has(d.id) : !has;
+      return `<label class="md-day${has ? ' md-has' : ''}"><input type="checkbox" data-md="${d.id}"${on && !has ? ' checked' : ''}${has ? ' disabled' : ''}>
+        <span>${esc(jpDate(d.date))}</span><small>${has ? `すでに「${esc(title)}」があります` : `${fmtMin(toMin(d.start || '10:00'))}〜${fmtMin(end)} → ${fmtMin(toMin(d.start || '10:00'))}〜${fmtMin(newEnd)}`}${over ? ` <b class="md-over">⚠ ${esc(s.endLimit)}を超えます</b>` : ''}</small></label>`;
+    }).join('') || '<p class="hint">日程がありません。</p>';
+    updateMorningSummary();
+  }
+  function updateMorningSummary() {
+    const n = document.querySelectorAll('#mdDays input:checked').length, over = document.querySelectorAll('#mdDays input:checked ~ small .md-over').length;
+    $('mdSummary').textContent = `${n}日に入れます。${over ? `そのうち${over}日は、終了の目安を超えます(あとでコマの長さや空きを調整できます)。` : ''}`;
+    $('mdSummary').classList.toggle('warn', over > 0);
+  }
+  function openMorningDialog() {
+    const s = cur();
+    const sample = s.days.flatMap((d) => d.blocks).find((b) => b.title === '朝礼');   // 既にある朝礼から、長さ・担当を引き継ぐ
+    $('mdTitle').value = '朝礼';
+    $('mdMinutes').value = sample ? sample.minutes : 15;
+    $('mdGap').value = 0;
+    fillMasterOptions('mdDept', 'depts', sample ? sample.dept : (store.depts.includes('イネーブル') ? 'イネーブル' : ''));
+    fillMasterOptions('mdPerson', 'people', sample ? sample.person : (store.people.includes('崎浦') ? '崎浦' : ''));
+    renderMorningDays(false);
+    $('morningDlg').showModal();
+  }
+
   // ---------- 担当部署・担当者の一覧 ----------
   function fillMasterOptions(selId, kind, value) {
     const names = store[kind].slice();
@@ -1785,6 +1821,25 @@
       shiftDays(cur(), 0, sign * Math.abs(n));
       commit();
     };
+    $('btnMorning').addEventListener('click', openMorningDialog);
+    ['mdTitle', 'mdMinutes', 'mdGap'].forEach((id) => $(id).addEventListener('input', () => renderMorningDays(true)));
+    $('mdDays').addEventListener('change', updateMorningSummary);
+    $('mdAll').addEventListener('click', () => { document.querySelectorAll('#mdDays input:not(:disabled)').forEach((e) => { e.checked = true; }); updateMorningSummary(); });
+    $('mdCancel').addEventListener('click', () => $('morningDlg').close());
+    $('morningForm').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const s = cur(), { title, minutes, gap } = morningInput();
+      const ids = new Set([...document.querySelectorAll('#mdDays input:checked')].map((x) => x.dataset.md));
+      if (!ids.size) { notify('入れる日を選んでください。'); return; }
+      snap('朝礼を入れる前');
+      s.days.filter((d) => ids.has(d.id)).forEach((d) => {
+        if (d.blocks.length) d.blocks[0].gap = gap;   // 朝礼の次のコマの「前との空き」
+        d.blocks.unshift(newBlock({ title, minutes, gap: 0, dept: $('mdDept').value, person: $('mdPerson').value, genre: guessGenre(title, '') }));
+      });
+      $('morningDlg').close();
+      commit();
+      notify(`${ids.size}日に「${title}」を入れました。`);
+    });
     $('btnBulkPlus').addEventListener('click', bulk(1));
     $('btnBulkMinus').addEventListener('click', bulk(-1));
     $('setSkipHol').addEventListener('change', (e) => { cur().skipHolidays = e.target.checked; save(); });
