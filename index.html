@@ -108,6 +108,7 @@
       <p class="hint">日にちが決まっていないコマ置き場。ドラッグで日へ入れられます。</p>
       <div id="backlogList" class="backlog-list" data-drop="backlog"></div>
       <button id="btnAddBacklog" type="button">＋ 未配置に追加</button>
+      <button id="btnImportBacklog" type="button">他の月のコマを取り込む…</button>
     </aside>
   </main>
 
@@ -216,6 +217,20 @@
       <div class="dlg-actions">
         <button type="submit" class="primary">保存</button>
         <button type="button" id="genreCancel" class="ghost">キャンセル</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="pullDlg">
+    <form id="pullForm" autocomplete="off">
+      <h3>他の月のコマを、未配置に取り込む</h3>
+      <p class="hint">選んだ月のコマ(日に入っているものと、未配置のもの)を、このスケジュールの「未配置」に、まとめてコピーします。元の月は変わりません。コピーしたコマの進捗は「未着手」になります。</p>
+      <label>取り込む月<select id="pullSource"></select></label>
+      <label class="inline"><input id="pullDedupe" type="checkbox" checked> 同じコマ(内容・長さ・担当が同じ)は、1つにまとめる</label>
+      <p id="pullPreview" class="preview"></p>
+      <div class="dlg-actions">
+        <button type="submit" class="primary">取り込む</button>
+        <button type="button" id="pullCancel" class="ghost">キャンセル</button>
       </div>
     </form>
   </dialog>

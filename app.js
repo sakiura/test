@@ -785,6 +785,34 @@
     render();
   }
 
+  // ---------- 他の月のコマを、未配置に取り込む ----------
+  function pullBlocks(src, dedupe) {
+    const all = [...src.days.flatMap((d) => d.blocks), ...src.backlog];
+    const seen = new Set(), out = [];
+    all.forEach((b) => {
+      const key = `${b.title}|${b.minutes}|${b.dept}|${b.person}`;
+      if (dedupe && seen.has(key)) return;
+      seen.add(key);
+      out.push({ ...JSON.parse(JSON.stringify(b)), id: uid(), status: 'todo', done: false, result: '', gap: 0 });
+    });
+    return { out, total: all.length };
+  }
+  function renderPullPreview() {
+    const src = store.schedules.find((x) => x.id === $('pullSource').value);
+    if (!src) { $('pullPreview').textContent = '取り込む月を選んでください。'; return; }
+    const { out, total } = pullBlocks(src, $('pullDedupe').checked);
+    $('pullPreview').textContent = `${out.length}個のコマを、未配置に入れます(元は全部で${total}個${out.length < total ? `。同じコマ${total - out.length}個をまとめました` : ''})。`;
+  }
+  function openPullDialog() {
+    const here = cur(), others = sortedSchedules().filter((x) => x.id !== here.id);
+    if (!others.length) { notify('取り込める他の月のスケジュールがありません。'); return; }
+    const prev = [...others].reverse().find((x) => x.month < here.month) || others[others.length - 1];
+    $('pullSource').innerHTML = others.map((x) => `<option value="${x.id}">${esc(monthLabel(x.month))}　${esc(x.name || '(無題)')}</option>`).join('');
+    $('pullSource').value = prev.id;
+    renderPullPreview();
+    $('pullDlg').showModal();
+  }
+
   // ---------- 朝礼を一括で入れる ----------
   const hasMorning = (d, title) => d.blocks.some((b) => b.title === title);
   function morningInput() {
@@ -1821,6 +1849,22 @@
       shiftDays(cur(), 0, sign * Math.abs(n));
       commit();
     };
+    $('btnImportBacklog').addEventListener('click', openPullDialog);
+    $('pullSource').addEventListener('change', renderPullPreview);
+    $('pullDedupe').addEventListener('change', renderPullPreview);
+    $('pullCancel').addEventListener('click', () => $('pullDlg').close());
+    $('pullForm').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const src = store.schedules.find((x) => x.id === $('pullSource').value);
+      if (!src) return;
+      const { out } = pullBlocks(src, $('pullDedupe').checked);
+      if (!out.length) { notify('取り込めるコマがありません。'); return; }
+      snap('未配置に取り込む前');
+      cur().backlog.push(...out);
+      $('pullDlg').close();
+      commit();
+      notify(`${out.length}個のコマを、未配置に取り込みました。`);
+    });
     $('btnMorning').addEventListener('click', openMorningDialog);
     ['mdTitle', 'mdMinutes', 'mdGap'].forEach((id) => $(id).addEventListener('input', () => renderMorningDays(true)));
     $('mdDays').addEventListener('change', updateMorningSummary);
