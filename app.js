@@ -631,13 +631,11 @@
         const cls = ['cal-cell', d.getMonth() !== mo ? 'out' : '', days.length ? 'has' : '', key === todayKey ? 'today' : '', key === s.endDate ? 'endday' : ''].filter(Boolean).join(' ');
         const lines = [];
         days.forEach((day) => layout(day).forEach(({ b, s: bs }) => lines.push({ b, bs })));
-        const MAX = 5;
         row += `<div class="${cls}" data-caldate="${key}"${days.length ? ` data-calday="${days[0].id}"${readOnly ? '' : ' draggable="true"'} title="クリックで詳細 / ドラッグで日付を移動"` : ''}>
           <div class="cal-top"><span class="cal-num dow-${hol ? 0 : wd}">${d.getDate()}</span>${hol ? `<span class="cal-hol">${esc(hol)}</span>` : ''}${key === s.endDate ? '<span class="cal-end">研修終了</span>' : ''}
             ${days.length ? '' : `<button type="button" class="cal-add" data-act="cal-add" data-date="${key}" aria-label="${d.getMonth() + 1}月${d.getDate()}日に研修日を追加">＋</button>`}</div>
           ${days.map((day) => `${day.section ? `<div class="cal-sec">${esc(day.section)}</div>` : ''}${day.venue ? `<div class="cal-venue">${esc(day.venue)}</div>` : ''}`).join('')}
-          ${lines.slice(0, MAX).map(({ b, bs }) => `<div class="cal-line${b.test ? ' test' : ''}${matchFilter(b) ? '' : ' dim'}"${b.genre ? ` style="--g:${genreColor(b.genre)}"` : ''}><span class="dot"></span><span class="t">${fmtMin(bs)}</span> ${stOf(b) === 'prep' ? '<span class="st-mark" title="準備中">◐</span> ' : ''}${esc(b.title)}</div>`).join('')}
-          ${lines.length > MAX ? `<div class="cal-more">ほか${lines.length - MAX}件</div>` : ''}
+          ${lines.map(({ b, bs }) => `<div class="cal-line${b.test ? ' test' : ''}${matchFilter(b) ? '' : ' dim'}"${b.genre ? ` style="--g:${genreColor(b.genre)}"` : ''}><span class="dot"></span><span class="t">${fmtMin(bs)}</span> ${stOf(b) === 'prep' ? '<span class="st-mark" title="準備中">◐</span> ' : ''}${esc(b.title)}</div>`).join('')}
         </div>`;
       }
       if (inMonth) rows += row;

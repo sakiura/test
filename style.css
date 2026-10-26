@@ -183,7 +183,6 @@ dialog label.inline { display: flex; gap: 6px; align-items: center; }
 .cal-line .t { font-variant-numeric: tabular-nums; color: var(--muted); }
 
 .cal-line.test { color: var(--danger); }
-.cal-more { font-size: 10px; color: var(--muted); }
 
 .year { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 12px; }
 .mini { text-align: left; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 10px; }
