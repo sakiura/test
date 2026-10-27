@@ -1095,6 +1095,29 @@
     const i = kids.findIndex((k) => { const r = k.getBoundingClientRect(); return y < r.top + r.height / 2; });
     return { kids, index: i < 0 ? kids.length : i };
   }
+  // ドラッグ中、移動先の日が画面の外にあっても届くように、画面の下に「日のボタン」を出す。端に寄せると、ページも動く
+  let dock = null, scrollTimer = null, lastY = 0;
+  function showDock() {
+    hideDock();
+    const sc = cur();
+    dock = document.createElement('div');
+    dock.className = 'drag-dock';
+    dock.innerHTML = '<span class="hint" style="margin:0">ここへ落とすと、その日の最後に入ります:</span>' +
+      sc.days.map((d) => `<button type="button" class="small" data-dockday="${d.id}">${esc(jpDate(d.date))}</button>`).join('') +
+      '<button type="button" class="small" data-dockday="backlog">未配置</button>';
+    document.body.appendChild(dock);
+    scrollTimer = setInterval(() => {
+      const top = dock ? dock.getBoundingClientRect().top : innerHeight;
+      if (lastY < 70) window.scrollBy(0, -Math.ceil((70 - lastY) / 3));
+      else if (lastY > top - 70 && lastY < top) window.scrollBy(0, Math.ceil((lastY - (top - 70)) / 3));
+    }, 16);
+  }
+  function hideDock() {
+    if (dock) dock.remove();
+    dock = null;
+    clearInterval(scrollTimer);
+    scrollTimer = null;
+  }
   function clearDropMarks() {
     document.querySelectorAll('.drop-target,.insert-before,.insert-end,.dragging').forEach((el) =>
       el.classList.remove('drop-target', 'insert-before', 'insert-end', 'dragging'));
@@ -1126,16 +1149,27 @@
       return;
     }
     dragId = el.dataset.block;
+    showDock();
     e.dataTransfer.setData('text/plain', dragId);
     e.dataTransfer.effectAllowed = 'move';
     el.classList.add('dragging');
   });
+  document.addEventListener('mousemove', () => { if (dock && !dragId && !dragDay) hideDock(); });
   document.addEventListener('dragend', () => {
     dragId = null; dragDay = null;
+    hideDock();
     document.querySelectorAll('[data-block], [data-dragday]').forEach((el) => { el.draggable = false; });
     clearDropMarks();
   });
   document.addEventListener('dragover', (e) => {
+    lastY = e.clientY;
+    const chip = dragId && e.target.closest && e.target.closest('[data-dockday]');
+    if (chip) {
+      e.preventDefault();
+      document.querySelectorAll('.drop-target').forEach((el) => el.classList.remove('drop-target'));
+      chip.classList.add('drop-target');
+      return;
+    }
     const inList = dragId && e.target.closest && e.target.closest('[data-drop]');
     const cell = !inList && (dragId || dragDay) && e.target.closest && e.target.closest('[data-caldate]');
     if (cell) {
@@ -1153,6 +1187,15 @@
     (kids[index] || box).classList.add(kids[index] ? 'insert-before' : 'insert-end');
   });
   document.addEventListener('drop', (e) => {
+    hideDock();   // コマを動かすと画面が描き直され、ドラッグ終了の合図が届かないことがあるため、ここでも必ず消す
+    const chip = dragId && e.target.closest && e.target.closest('[data-dockday]');
+    if (chip) {
+      e.preventDefault();
+      moveBlock(dragId, chip.dataset.dockday, 1e9);
+      dragId = null;
+      clearDropMarks();
+      return commit();
+    }
     const inList = dragId && e.target.closest && e.target.closest('[data-drop]');
     const cell = !inList && (dragId || dragDay) && e.target.closest && e.target.closest('[data-caldate]');
     if (cell) {

@@ -341,3 +341,10 @@ select.st-done { background: color-mix(in srgb, var(--ok) 26%, var(--panel)); }
 .md-over { color: var(--danger); }
 
 #btnImportBacklog { margin-top: 6px; }
+
+/* ドラッグ中に出る「日のボタン」 */
+.drag-dock { position: fixed; left: 0; right: 0; bottom: 0; z-index: 60; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 8px 12px calc(8px + env(safe-area-inset-bottom, 0px));
+  background: var(--panel); border-top: 2px solid var(--primary); box-shadow: 0 -6px 20px rgba(0,0,0,.18); max-height: 32vh; overflow-y: auto; }
+.drag-dock button { min-width: 64px; }
+.drag-dock button.drop-target { outline: 2px dashed var(--primary); background: color-mix(in srgb, var(--primary) 18%, var(--panel)); }
+@media print { .drag-dock { display: none !important; } }
