@@ -235,6 +235,22 @@
     </form>
   </dialog>
 
+  <dialog id="statusDlg">
+    <form id="statusForm" autocomplete="off">
+      <h3>同じ内容のコマの進捗を、まとめて変える</h3>
+      <p class="hint">このスケジュールの中で、内容が同じコマ(日に入っているもの・未配置のもの)の進捗を、まとめて変えます。変える前の状態は、変更履歴に残ります。</p>
+      <div class="grid2">
+        <label>内容<select id="stTitle"></select></label>
+        <label>進捗<select id="stStatus"></select></label>
+      </div>
+      <p id="stPreview" class="preview"></p>
+      <div class="dlg-actions">
+        <button type="submit" class="primary">変える</button>
+        <button type="button" id="stCancel" class="ghost">キャンセル</button>
+      </div>
+    </form>
+  </dialog>
+
   <dialog id="morningDlg">
     <form id="morningForm" autocomplete="off">
       <h3>朝礼を一括で入れる</h3>
@@ -247,6 +263,10 @@
       <div class="grid2">
         <label>担当(部署)<select id="mdDept"></select></label>
         <label>担当者<select id="mdPerson"></select></label>
+      </div>
+      <div class="grid2">
+        <label>進捗<select id="mdStatus"></select></label>
+        <span></span>
       </div>
       <label>入れる日<span class="sub">(チェックを外した日には入れません。すでに朝礼がある日は、はじめから外れています)</span></label>
       <div id="mdDays" class="md-days"></div>

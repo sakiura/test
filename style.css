@@ -237,7 +237,7 @@ dialog select { display: block; width: 100%; margin-top: 3px; font-size: 14px; }
 
 /* 閲覧のみ */
 .ro .blk-actions, .ro .day-actions, .ro .day-foot, .ro .grip, .ro #btnAddDay, .ro #btnAddBacklog, .ro .bulk, .ro #btnNewMonth,
-.ro #btnImportBacklog, .ro #btnImport, .ro #btnDelSched, .ro #schedMonth, .ro #btnGenres, .ro [data-hist], .ro .cal-add, .ro #btnMigrate { display: none !important; }
+.ro #btnBulkStatus, .ro #btnImportBacklog, .ro #btnImport, .ro #btnDelSched, .ro #schedMonth, .ro #btnGenres, .ro [data-hist], .ro .cal-add, .ro #btnMigrate { display: none !important; }
 .ro .backlog select { display: none; }
 
 /* 日ごとを横に並べる */

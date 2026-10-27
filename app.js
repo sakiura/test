@@ -339,7 +339,7 @@
     [...s.days.flatMap((d) => d.blocks), ...s.backlog].forEach((b) => { cnt[stOf(b)]++; });
     const tabs = [['', 'すべて', cnt.todo + cnt.prep + cnt.done], ...STATUSES.map((x) => [x.key, x.label, cnt[x.key]])];
     $('statusBar').innerHTML = '<span class="hint" style="margin:0">進捗:</span><div class="tabs" role="group" aria-label="進捗で絞り込み">' +
-      tabs.map(([k, l, n]) => `<button type="button" data-status="${k}" aria-pressed="${statusFilter === k}">${l}<small>${n}</small></button>`).join('') + '</div>';
+      tabs.map(([k, l, n]) => `<button type="button" data-status="${k}" aria-pressed="${statusFilter === k}">${l}<small>${n}</small></button>`).join('') + '</div><button type="button" class="small" id="btnBulkStatus">進捗をまとめて変える…</button>';
   }
 
   function renderSummary(s) {
@@ -785,6 +785,24 @@
     render();
   }
 
+  // ---------- 同じ内容のコマの進捗を、まとめて変える ----------
+  const blocksOf = (s) => [...s.days.flatMap((d) => d.blocks), ...s.backlog];
+  function renderStatusPreview() {
+    const t = $('stTitle').value, st = $('stStatus').value;
+    const all = blocksOf(cur()).filter((b) => b.title === t), change = all.filter((b) => stOf(b) !== st);
+    $('stPreview').textContent = all.length ? `「${t}」は${all.length}個あります。そのうち${change.length}個を「${statusLabel(st)}」に変えます。` : '内容を選んでください。';
+  }
+  function openStatusDialog() {
+    const counts = new Map();
+    blocksOf(cur()).forEach((b) => counts.set(b.title, (counts.get(b.title) || 0) + 1));
+    if (!counts.size) { notify('コマがありません。'); return; }
+    $('stTitle').innerHTML = [...counts].sort((a, b) => b[1] - a[1]).map(([t, n]) => `<option value="${esc(t)}">${esc(t)}(${n}個)</option>`).join('');
+    if (counts.has('朝礼')) $('stTitle').value = '朝礼';
+    $('stStatus').innerHTML = statusOptsHtml('done');
+    renderStatusPreview();
+    $('statusDlg').showModal();
+  }
+
   // ---------- 他の月のコマを、未配置に取り込む ----------
   function pullBlocks(src, dedupe) {
     const all = [...src.days.flatMap((d) => d.blocks), ...src.backlog];
@@ -843,6 +861,7 @@
     $('mdTitle').value = '朝礼';
     $('mdMinutes').value = sample ? sample.minutes : 15;
     $('mdGap').value = 0;
+    $('mdStatus').innerHTML = statusOptsHtml('done');   // 朝礼は、はじめから「完了」にする(変えられます)
     fillMasterOptions('mdDept', 'depts', sample ? sample.dept : (store.depts.includes('イネーブル') ? 'イネーブル' : ''));
     fillMasterOptions('mdPerson', 'people', sample ? sample.person : (store.people.includes('崎浦') ? '崎浦' : ''));
     renderMorningDays(false);
@@ -1761,6 +1780,7 @@
     $('histClose').addEventListener('click', () => $('histDlg').close());
     $('histList').addEventListener('click', (e) => { const b = e.target.closest('[data-hist]'); if (b) restoreSnap(Number(b.dataset.hist)); });
     $('statusBar').addEventListener('click', (e) => {
+      if (e.target.closest('#btnBulkStatus')) return openStatusDialog();
       const c = e.target.closest('[data-status]');
       if (c) { statusFilter = c.dataset.status; render(); }
     });
@@ -1849,6 +1869,20 @@
       shiftDays(cur(), 0, sign * Math.abs(n));
       commit();
     };
+    $('stTitle').addEventListener('change', renderStatusPreview);
+    $('stStatus').addEventListener('change', renderStatusPreview);
+    $('stCancel').addEventListener('click', () => $('statusDlg').close());
+    $('statusForm').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const t = $('stTitle').value, st = $('stStatus').value;
+      const change = blocksOf(cur()).filter((b) => b.title === t && stOf(b) !== st);
+      if (!change.length) { $('statusDlg').close(); notify('変えるコマはありません。'); return; }
+      snap('進捗をまとめて変える前');
+      change.forEach((b) => setStatus(b, st));
+      $('statusDlg').close();
+      commit();
+      notify(`「${t}」${change.length}個の進捗を「${statusLabel(st)}」にしました。`);
+    });
     $('btnImportBacklog').addEventListener('click', openPullDialog);
     $('pullSource').addEventListener('change', renderPullPreview);
     $('pullDedupe').addEventListener('change', renderPullPreview);
@@ -1878,7 +1912,9 @@
       snap('朝礼を入れる前');
       s.days.filter((d) => ids.has(d.id)).forEach((d) => {
         if (d.blocks.length) d.blocks[0].gap = gap;   // 朝礼の次のコマの「前との空き」
-        d.blocks.unshift(newBlock({ title, minutes, gap: 0, dept: $('mdDept').value, person: $('mdPerson').value, genre: guessGenre(title, '') }));
+        const nb = newBlock({ title, minutes, gap: 0, dept: $('mdDept').value, person: $('mdPerson').value, genre: guessGenre(title, '') });
+        setStatus(nb, $('mdStatus').value);
+        d.blocks.unshift(nb);
       });
       $('morningDlg').close();
       commit();
