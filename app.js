@@ -785,6 +785,137 @@
     render();
   }
 
+  // ---------- ざっくり追加(「この日にこれをやる」を、内容だけ先に入れる) ----------
+  const toHalf = (t) => t.replace(/[０-９]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0xfee0)).replace(/[／]/g, '/').replace(/[：]/g, ':');
+  function parseQuick(text, year) {
+    const t = toHalf(text).replace(/\r/g, '\n');
+    const DATE = /(\d{1,2})\s*(?:\/|月)\s*(\d{1,2})\s*日?|(未配置|未定|日付なし|日にち未定)/g;
+    const marks = [...t.matchAll(DATE)].filter((m) => m[3] || Number(m[1]) <= 12)
+      .map((m) => ({ at: m.index, end: m.index + m[0].length, date: m[3] ? '' : `${year}-${pad(m[1])}-${pad(m[2])}` }));
+    const parts = [];
+    const head = t.slice(0, marks.length ? marks[0].at : t.length);
+    if (head.trim()) parts.push({ date: '', body: head });
+    marks.forEach((m, i) => parts.push({ date: m.date, body: t.slice(m.end, i + 1 < marks.length ? marks[i + 1].at : t.length) }));
+    const names = [...store.people].sort((a, b) => b.length - a.length);
+    const out = [];
+    parts.forEach(({ date, body }) => {
+      const namesRe = names.map((n) => n.replace(/[.*+?^${}()|[\]\\\/]/g, '\\$&')).join('|');
+    // 「15分」「1時間30分」「担当柚木」のあとは、そこで1つの項目が終わる(読点なしで続けて話したとき用)
+    const cut = new RegExp(`(\\d+(?:\\.\\d+)?\\s*時間(?:\\s*\\d+\\s*分)?|\\d+\\s*分)(?!\\s*(?:担当|${namesRe}|\\d+\\s*分))(?=\\s*\\S)|(担当[はがを:]?\\s*(?:${namesRe})(?:さん|氏)?)(?=\\s*\\S)`, 'g');
+    body.replace(cut, '$&、').split(/[、,，。\n;；]+/).map((x) => x.trim()).filter(Boolean).forEach((raw) => {
+        let item = raw.replace(/^(は|に|で|の|:|\s)+/, ''), minutes = '', person = '';
+        const h = /(\d+(?:\.\d+)?)\s*時間\s*(?:(\d+)\s*分)?/.exec(item), m = /(\d+)\s*分/.exec(item);
+        if (h) { minutes = Math.round(Number(h[1]) * 60 + (h[2] ? Number(h[2]) : 0)); item = item.replace(h[0], ' '); }
+        else if (m) { minutes = Number(m[1]); item = item.replace(m[0], ' '); }
+        const who = names.find((n) => item.includes(n));
+        if (who) { person = who; item = item.replace(new RegExp(`(担当[はがを:]?\\s*)?${who.replace(/[.*+?^${}()|[\]\\\/]/g, '\\$&')}(さん|氏)?(が|は)?`), ' '); }
+        item = item.replace(/担当[はがを:]?/g, ' ').replace(/(をやる|を行う|をします|やる|やります)$/, '').replace(/\s+/g, ' ').trim();
+        if (item) out.push({ date, title: item, minutes, person });
+      });
+    });
+    return out;
+  }
+  let quickRows = [];
+  function renderQuickRows() {
+    $('qRows').innerHTML = quickRows.map((r, i) => `<div class="q-row"><input type="date" data-qi="${i}" data-qf="date" value="${esc(r.date)}" aria-label="日付">
+      <input data-qi="${i}" data-qf="title" value="${esc(r.title)}" aria-label="内容">
+      <input type="number" min="5" step="5" data-qi="${i}" data-qf="minutes" value="${r.minutes}" placeholder="分" aria-label="長さ(分)">
+      <select data-qi="${i}" data-qf="person" aria-label="担当者">${masterOptsHtml('people', r.person, '担当者')}</select>
+      <button type="button" class="small danger" data-qdel="${i}" aria-label="この行をやめる">×</button></div>`).join('');
+    updateQuickSummary();
+  }
+  function renderQuick() {
+    quickRows = parseQuick($('qText').value, Number(cur().month.slice(0, 4)));
+    renderQuickRows();
+  }
+  function updateQuickSummary() {
+    const withDate = quickRows.filter((r) => r.date).length;
+    $('qSummary').textContent = quickRows.length ? `${quickRows.length}個のコマを入れます(日に入れる ${withDate}個 / 未配置 ${quickRows.length - withDate}個)。長さが空のコマは、60分で入ります。` : 'ここに入力すると、下に、読み取った内容が出ます。';
+  }
+  function addQuick() {
+    const s = cur(), rows = quickRows.filter((r) => r.title.trim());
+    if (!rows.length) { notify('入れる内容がありません。'); return; }
+    snap('ざっくり追加の前');
+    rows.forEach((r) => {
+      const b = newBlock({ title: r.title.trim(), minutes: Math.max(5, parseInt(r.minutes, 10) || 60), person: r.person || '', genre: guessGenre(r.title, ''), gap: 0 });
+      if (!r.date) { s.backlog.push(b); return; }
+      let d = s.days.find((x) => x.date === r.date);
+      if (!d) {
+        const last = s.days[s.days.length - 1];
+        d = { id: uid(), date: r.date, venue: last ? last.venue : '', start: s.defaultStart, section: '', blocks: [] };
+        s.days.push(d);
+        sortDays(s);
+      }
+      b.gap = d.blocks.length ? s.defaultGap : 0;
+      d.blocks.push(b);
+    });
+    commit();
+    notify(`${rows.length}個のコマを入れました。長さや担当は、あとから直せます。`);
+  }
+
+  // ---------- スプレッドシート更新の原稿(Claude in Chrome に渡す指示文) ----------
+  const SC_KEY = 'training-schedule-sheet';
+  function buildSheetPrompt() {
+    const s = cur();
+    const ids = new Set([...document.querySelectorAll('#scDays input:checked')].map((e) => e.dataset.sc));
+    const days = s.days.filter((d) => ids.has(d.id));
+    const url = $('scUrl').value.trim() || '(スプレッドシートのURL)', tab = $('scTab').value.trim() || s.name || '(タブの名前)', prog = $('scProgress').checked;
+    const md = (d) => { const x = parseDate(d); return `${x.getMonth() + 1}/${x.getDate()}(${DOW[x.getDay()]})`; };
+    const body = days.map((d) => {
+      const tl = layout(d);
+      const head = `${md(d.date)}${d.section ? `  区分: ${d.section}` : ''}${d.venue ? `  会場: ${d.venue}` : ''}`;
+      const lines = [];
+      tl.forEach(({ b, s: bs, e: be }, i) => {
+        if (i > 0 && bs - tl[i - 1].e >= 20) lines.push(`(${fmtMin(tl[i - 1].e)}-${fmtMin(bs)} は、コマなし)`);
+        const who = [b.dept, b.person].filter(Boolean).length ? `${b.dept || '-'} / ${b.person || '-'}` : '(担当なし) / -';
+        const br = breakSpan(b, bs);
+        lines.push(`${fmtMin(bs)}-${fmtMin(be)} / ${b.minutes} / ${who} / ${b.title}${br ? ` (中休憩 ${fmtMin(br.s)}-${fmtMin(br.e)})` : ''}${prog ? ` / 進捗: ${statusLabel(stOf(b))}` : ''}`);
+      });
+      return `${head}\n${lines.join('\n') || '(コマなし)'}`;
+    }).join('\n');
+    const range = days.length ? (days.length === 1 ? md(days[0].date) : `${md(days[0].date)}〜${md(days[days.length - 1].date)}`) : '(日を選んでください)';
+    return `このスプレッドシートの「${tab}」タブにある、${range}の日程を、下の最新内容に合わせて直してください。
+${url}
+
+【進め方】
+1. まず、タブの中から、対象の日の行を探して、いまのシートの内容(時間・分・担当・担当者・研修内容・目的・詳細・資料など)を、読み取ってください。
+2. 下の「最新内容」と比べて、「どのセルを、何から何に変えるか」「追加する行」「消す行」の一覧を作り、私に見せてください。この時点では、まだ書き換えないでください。
+3. 私が「OK」と言ってから、書き換えてください。
+4. 対象の日以外の行、色、罫線、数式、結合セル、ほかのタブは、変えないでください。
+5. 書き換えたあと、変更したセルの一覧を報告してください。
+
+【書き方のルール】
+- 「時間」の列は、いまのシートの書き方に合わせてください(例: 10:00-10:15)。「分」の列は、時間の長さ(分)です。
+- 「担当」の列は担当部署、「担当者」の列は担当者の名前です。
+- 目的・詳細・資料・テスト・memo の列は、すでに書いてある内容を残してください。下の最新内容に、これらの情報はありません。
+- 行が足りないときは、その日の最後のコマの下に、行を挿入してください(ほかの日の行は、ずらさないでください)。
+- 「(○○-○○ は、コマなし)」は、昼休みなどのコマの間のすきまです。行は作らないでください。
+${prog ? '- 「進捗」の列があるときだけ、最新内容の進捗(未着手・準備中・完了)を書いてください。列がないときは、無視してください。\n' : ''}
+【最新内容】(時間 / 分 / 担当(部署) / 担当者 / 研修内容)
+${body || '(日を選んでください)'}
+`;
+  }
+  function renderScript(keepChecked) {
+    const s = cur(), was = new Set([...document.querySelectorAll('#scDays input:checked')].map((e) => e.dataset.sc));
+    $('scDays').innerHTML = s.days.map((d) => `<label class="md-day"><input type="checkbox" data-sc="${d.id}"${keepChecked ? (was.has(d.id) ? ' checked' : '') : ''}><span>${esc(jpDate(d.date))}</span><small>${d.blocks.length}コマ${d.section ? ` / ${esc(d.section)}` : ''}</small></label>`).join('') || '<p class="hint">日程がありません。</p>';
+    $('scText').value = buildSheetPrompt();
+  }
+  function selectScriptDays(fn) {
+    const s = cur();
+    document.querySelectorAll('#scDays input').forEach((e) => { const d = s.days.find((x) => x.id === e.dataset.sc); e.checked = !!d && fn(d); });
+    $('scText').value = buildSheetPrompt();
+  }
+  function openScriptDialog() {
+    let saved = {};
+    try { saved = JSON.parse(localStorage.getItem(SC_KEY)) || {}; } catch (e) { /* なし */ }
+    $('scUrl').value = saved.url || '';
+    $('scTab').value = cur().name || '';
+    renderScript(false);
+    selectScriptDays((d) => d.date >= fmtDate(new Date()));
+    if (!document.querySelector('#scDays input:checked')) selectScriptDays(() => true);
+    $('scriptDlg').showModal();
+  }
+
   // ---------- 同じ内容のコマの進捗を、まとめて変える ----------
   const blocksOf = (s) => [...s.days.flatMap((d) => d.blocks), ...s.backlog];
   function renderStatusPreview() {
@@ -1942,6 +2073,32 @@
       commit();
       notify(`${out.length}個のコマを、未配置に取り込みました。`);
     });
+    $('btnQuick').addEventListener('click', () => { $('qText').value = ''; renderQuick(); $('quickDlg').showModal(); $('qText').focus(); });
+    $('qText').addEventListener('input', renderQuick);
+    $('qRows').addEventListener('input', (e) => {
+      const i = e.target.dataset.qi;
+      if (i !== undefined) { quickRows[i][e.target.dataset.qf] = e.target.value; updateQuickSummary(); }
+    });
+    $('qRows').addEventListener('click', (e) => {
+      const b = e.target.closest('[data-qdel]');
+      if (!b) return;
+      quickRows.splice(Number(b.dataset.qdel), 1);
+      renderQuickRows();
+    });
+    $('qCancel').addEventListener('click', () => $('quickDlg').close());
+    $('quickForm').addEventListener('submit', (e) => { e.preventDefault(); $('quickDlg').close(); addQuick(); });
+    $('btnSheetScript').addEventListener('click', openScriptDialog);
+    ['scUrl', 'scTab'].forEach((id) => $(id).addEventListener('input', () => {
+      $('scText').value = buildSheetPrompt();
+      if (id === 'scUrl') { try { localStorage.setItem(SC_KEY, JSON.stringify({ url: $('scUrl').value.trim() })); } catch (err) { /* 保存できなくても使える */ } }
+    }));
+    $('scProgress').addEventListener('change', () => { $('scText').value = buildSheetPrompt(); });
+    $('scDays').addEventListener('change', () => { $('scText').value = buildSheetPrompt(); });
+    $('scFuture').addEventListener('click', () => selectScriptDays((d) => d.date >= fmtDate(new Date())));
+    $('scAll').addEventListener('click', () => selectScriptDays(() => true));
+    $('scNone').addEventListener('click', () => selectScriptDays(() => false));
+    $('scCopy').addEventListener('click', () => copyField('scText'));
+    $('scClose').addEventListener('click', () => $('scriptDlg').close());
     $('btnMorning').addEventListener('click', openMorningDialog);
     ['mdTitle', 'mdMinutes', 'mdGap'].forEach((id) => $(id).addEventListener('input', () => renderMorningDays(true)));
     $('mdDays').addEventListener('change', updateMorningSummary);

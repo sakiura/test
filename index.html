@@ -22,6 +22,7 @@
     </div>
     <div class="actions">
       <button id="btnImport" class="ghost" type="button">取り込み</button>
+      <button id="btnSheetScript" class="ghost" type="button" title="Claude in Chrome に渡す、スプレッドシート更新用の指示文を作る">シート更新の原稿</button>
       <button id="btnCopy" class="ghost" type="button" title="スプレッドシートにそのまま貼り付けられる形式でコピー">シートへ貼付用コピー</button>
       <button id="btnCsv" class="ghost" type="button">CSV</button>
       <button id="btnIcs" class="ghost" type="button">カレンダー(.ics)</button>
@@ -33,6 +34,7 @@
 
   <div class="toolbar">
     <button id="btnAddDay" class="primary" type="button">＋ 日を追加</button>
+    <button id="btnQuick" type="button" title="この日にこれをやる、を、内容だけ先にまとめて入れる">ざっくり追加…</button>
     <details class="bulk">
       <summary>日程の一括変更・設定</summary>
       <div class="bulk-body">
@@ -231,6 +233,41 @@
       <div class="dlg-actions">
         <button type="submit" class="primary">取り込む</button>
         <button type="button" id="pullCancel" class="ghost">キャンセル</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="quickDlg">
+    <form id="quickForm" autocomplete="off">
+      <h3>ざっくり追加</h3>
+      <p class="hint">「この日に、これをやる」を、内容だけ先に入れます。時間(長さ)や担当は、あとから決められます。パソコンの音声入力(Mac は、fn キーを2回押す / Windows は、Windows キー+H)で、話して入れることもできます。</p>
+      <textarea id="qText" rows="6" placeholder="例)&#10;11/12 営業オリエン、契約書オリエン、現金の扱い&#10;11/13 朝礼 15分、商品管理オリエン 担当柚木 90分&#10;未配置 ヒアリング講義、契約書復習"></textarea>
+      <p class="hint" style="margin-top:6px">書き方: 日付(11/12 や 11月12日)のあとに、内容を並べます(「、」や「。」で区切ります)。「30分」「1時間30分」「担当山嵜」も書けます。日が決まっていないコマは、「未配置」「未定」と書いたあとに並べるか、最初の日付より前に書くと、未配置に入ります。</p>
+      <div id="qRows" class="q-rows"></div>
+      <p id="qSummary" class="preview"></p>
+      <div class="dlg-actions">
+        <button type="submit" class="primary">追加する</button>
+        <button type="button" id="qCancel" class="ghost">キャンセル</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="scriptDlg">
+    <form id="scriptForm" autocomplete="off">
+      <h3>スプレッドシート更新の原稿</h3>
+      <p class="hint">Claude in Chrome に渡す指示文を作ります。選んだ日の最新内容が入ります。Claude in Chrome は、シートを読んで、変更の一覧を見せてから、OKのあとに書き換えます。</p>
+      <div class="grid2">
+        <label>スプレッドシートのURL<input id="scUrl" placeholder="https://docs.google.com/spreadsheets/d/…"></label>
+        <label>タブの名前<input id="scTab"></label>
+      </div>
+      <label class="inline"><input id="scProgress" type="checkbox"> 進捗(未着手・準備中・完了)も反映する</label>
+      <label>対象の日<span class="sub">(この日の内容を、原稿に入れます)</span></label>
+      <div class="dlg-actions" style="margin:0 0 6px"><button type="button" class="small" id="scFuture">今日以降</button><button type="button" class="small" id="scAll">すべて</button><button type="button" class="small" id="scNone">選択を外す</button></div>
+      <div id="scDays" class="md-days"></div>
+      <label>原稿<textarea id="scText" rows="12" readonly></textarea></label>
+      <div class="dlg-actions">
+        <button type="button" id="scCopy" class="primary">コピー</button>
+        <button type="button" id="scClose" class="ghost">閉じる</button>
       </div>
     </form>
   </dialog>

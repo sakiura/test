@@ -237,7 +237,7 @@ dialog select { display: block; width: 100%; margin-top: 3px; font-size: 14px; }
 
 /* 閲覧のみ */
 .ro .blk-actions, .ro .day-actions, .ro .day-foot, .ro .grip, .ro #btnAddDay, .ro #btnAddBacklog, .ro .bulk, .ro #btnNewMonth,
-.ro #btnBulkStatus, .ro #btnImportBacklog, .ro #btnImport, .ro #btnDelSched, .ro #schedMonth, .ro #btnGenres, .ro [data-hist], .ro .cal-add, .ro #btnMigrate { display: none !important; }
+.ro #btnQuick, .ro #btnBulkStatus, .ro #btnImportBacklog, .ro #btnImport, .ro #btnDelSched, .ro #schedMonth, .ro #btnGenres, .ro [data-hist], .ro .cal-add, .ro #btnMigrate { display: none !important; }
 .ro .backlog select { display: none; }
 
 /* 日ごとを横に並べる */
@@ -348,3 +348,10 @@ select.st-done { background: color-mix(in srgb, var(--ok) 26%, var(--panel)); }
 .drag-dock button { min-width: 64px; }
 .drag-dock button.drop-target { outline: 2px dashed var(--primary); background: color-mix(in srgb, var(--primary) 18%, var(--panel)); }
 @media print { .drag-dock { display: none !important; } }
+
+/* ざっくり追加 */
+.q-rows { display: grid; gap: 4px; margin: 8px 0; max-height: 36vh; overflow-y: auto; }
+.q-row { display: grid; grid-template-columns: 140px 1fr 74px 110px auto; gap: 6px; align-items: center; }
+.q-row input, .q-row select { margin-top: 0 !important; }
+@media (max-width: 700px) { .q-row { grid-template-columns: 1fr 1fr; } }
+#scText { font-size: 12px; font-family: ui-monospace, "SF Mono", Menlo, monospace; }
